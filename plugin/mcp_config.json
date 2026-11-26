@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "server": {
+      "command": "bash",
+      "args": [
+        "${PLUGIN_ROOT}/bin/skill-docs-server",
+        "--data_dir=${PLUGIN_DATA}"
+      ]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "skill-docs",
+  "version": "1.0.0",
+  "description": "Manage AI Agent SKILL.md bundles as intuitively as regular documents — Antigravity MCP App side-pane & full-page Finder plugin.",
+  "license": "MIT",
+  "homepage": "https://github.com/southislandoneidlers/better-skills-manager#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/southislandoneidlers/better-skills-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/southislandoneidlers/better-skills-manager/issues"
+  },
+  "type": "module",
+  "bin": {
+    "skill-docs": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist/",
+    "plugin/",
+    "README.md",
+    "README.zh-TW.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "mcp",
+    "mcp-apps",
+    "antigravity",
+    "agent-skills",
+    "skill-md",
+    "ai-agents",
+    "plugin"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "install:plugin": "npm run build && node ./dist/cli.mjs install",
+    "prepublishOnly": "npm run typecheck && npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}
