@@ -84,20 +84,20 @@ function cmdInstall(args: string[]): void {
     }
   }
 
-  console.log(`✅ Installed Skill Docs (v${readPackageVersion()}) to:\n   ${target}`);
+  console.log(`✅ Installed Better-skills-manager (v${readPackageVersion()}) to:\n   ${target}`);
   console.log('\nNext steps in Antigravity:');
-  console.log('  1. Open the "+" menu in the right side pane (or left sidebar) and select "Skill 文件庫".');
-  console.log('  2. Or ask the agent: "Open Skill Docs".');
+  console.log('  1. Open the "+" menu in the right side pane (or left sidebar) and select "Better-skills-manager".');
+  console.log('  2. Or ask the agent: "Open Better-skills-manager".');
 }
 
 function cmdUninstall(args: string[]): void {
   const target = resolve(parseOption(args, '--target') || defaultTargetDir());
   if (!existsSync(target)) {
-    console.log(`ℹ️ Skill Docs plugin is not installed at ${target}`);
+    console.log(`ℹ️ Better-skills-manager plugin is not installed at ${target}`);
     return;
   }
   rmSync(target, { recursive: true, force: true });
-  console.log(`🗑️ Removed Skill Docs plugin from:\n   ${target}`);
+  console.log(`🗑️ Removed Better-skills-manager plugin from:\n   ${target}`);
   console.log('   (Your Skills under ~/.gemini/config/skills were preserved.)');
 }
 
@@ -145,15 +145,15 @@ async function cmdMcp(args: string[]): Promise<void> {
 }
 
 function printHelp(): void {
-  console.log(`skill-docs v${readPackageVersion()} — Manage AI Skills as intuitively as regular documents
+  console.log(`better-skills-manager v${readPackageVersion()} — Manage AI Skills as intuitively as regular documents
 
 Usage:
-  skill-docs install [--target <dir>]    Install Antigravity plugin (default: ~/.gemini/config/plugins/skill-docs)
-  skill-docs uninstall [--target <dir>]  Uninstall Antigravity plugin (keeps your skills intact)
-  skill-docs status [--target <dir>]     Show plugin installation status as JSON
-  skill-docs mcp [--data_dir <dir>]      Run the MCP Apps stdio server directly
-  skill-docs --version                   Show version
-  skill-docs --help                      Show this help message`);
+  better-skills-manager install [--target <dir>]    Install Antigravity plugin (default: ~/.gemini/config/plugins/skill-docs)
+  better-skills-manager uninstall [--target <dir>]  Uninstall Antigravity plugin (keeps your skills intact)
+  better-skills-manager status [--target <dir>]     Show plugin installation status as JSON
+  better-skills-manager mcp [--data_dir <dir>]      Run the MCP Apps stdio server directly
+  better-skills-manager --version                   Show version
+  better-skills-manager --help                      Show this help message`);
 }
 
 async function main(): Promise<void> {

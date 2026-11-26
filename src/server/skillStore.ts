@@ -27,6 +27,7 @@ import type {
   SkillSourceMeta,
   SkillSummary,
   SnapshotPayload,
+  UiLang,
 } from '../shared/types.ts';
 import {
   parseSkillMarkdown,
@@ -135,6 +136,7 @@ export class SkillStore {
   private readonly builtinSkillsDir: string;
   private readonly scratchRootDir: string;
   private readonly scopesFile: string;
+  private readonly prefsFile: string;
   private readonly extraScopes: CustomScopeRecord[];
   private readonly usageEngine: UsageAnalyticsEngine;
   private readonly enableWatcher: boolean;
@@ -157,6 +159,7 @@ export class SkillStore {
     this.scratchRootDir =
       options.scratchRootDir ?? join(this.appDataDir, 'scratch');
     this.scopesFile = join(this.pluginDataDir, 'scopes.json');
+    this.prefsFile = join(this.pluginDataDir, 'preferences.json');
     this.extraScopes = options.extraScopes ?? [];
     this.enableWatcher = options.enableWatcher ?? true;
     this.usageEngine = new UsageAnalyticsEngine(this.appDataDir, this.pluginDataDir);
@@ -169,6 +172,33 @@ export class SkillStore {
   bumpSeq(): void {
     this.changeSeq += 1;
     this.cachedSnapshot = null;
+  }
+
+  getUiLang(): UiLang | undefined {
+    if (!existsSync(this.prefsFile)) return undefined;
+    try {
+      const parsed = JSON.parse(readFileSync(this.prefsFile, 'utf-8')) as { uiLang?: string };
+      if (parsed.uiLang === 'en' || parsed.uiLang === 'zh-TW') return parsed.uiLang;
+    } catch {
+      // ignore
+    }
+    return undefined;
+  }
+
+  setUiLang(uiLang: UiLang): UiLang {
+    mkdirSync(this.pluginDataDir, { recursive: true });
+    let existing: Record<string, unknown> = {};
+    if (existsSync(this.prefsFile)) {
+      try {
+        existing = JSON.parse(readFileSync(this.prefsFile, 'utf-8')) as Record<string, unknown>;
+      } catch {
+        existing = {};
+      }
+    }
+    existing.uiLang = uiLang;
+    writeFileSync(this.prefsFile, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+    this.bumpSeq();
+    return uiLang;
   }
 
   private loadCustomScopes(): CustomScopeRecord[] {
@@ -732,6 +762,7 @@ export class SkillStore {
     const payload: SnapshotPayload = {
       seq: this.changeSeq,
       generatedAt: new Date().toISOString(),
+      uiLang: this.getUiLang(),
       scopes,
       folders: allFolders,
       skills: summaries,

@@ -1,6 +1,6 @@
-# Contributing to Skill Docs
+# Contributing to Better-skills-manager
 
-Thank you for your interest in contributing to **Skill Docs (`skill-docs`)**!
+Thank you for your interest in contributing to **Better-skills-manager**!
 
 ## Prerequisites
 
@@ -11,19 +11,21 @@ Thank you for your interest in contributing to **Skill Docs (`skill-docs`)**!
 ## Project Structure
 
 ```text
-skill-docs/
+better-skills-manager/
+├── docs/assets/            # Preview screenshots rendered from the real UI
 ├── plugin/                 # Antigravity plugin manifest, icon, MCP config, companion skill
 ├── scripts/
 │   ├── build.mjs           # esbuild bundler for server.mjs, cli.mjs, and single-file app.html
+│   ├── capture-previews.mjs# Headless Chrome screenshot generator for README previews
 │   ├── install.sh          # One-step install from source
 │   └── test.mjs            # Compiles and runs Node test runner suite
 ├── src/
 │   ├── cli.ts              # CLI entrypoint (`install`, `uninstall`, `status`, `mcp`)
 │   ├── shared/types.ts     # Shared TypeScript interfaces between backend and UI
 │   ├── server/             # MCP server, filesystem store, YAML parser, linter, analytics, graph
-│   └── ui/                 # React + @modelcontextprotocol/ext-apps single-file web UI
+│   └── ui/                 # Bilingual (EN / zh-TW) React + @modelcontextprotocol/ext-apps UI
 └── tests/
-    └── skill-docs.test.ts  # Integration, AC-1..AC-6, MCP E2E, and CLI tests
+    └── skill-docs.test.ts  # Integration, AC-1..AC-6, i18n/terminology, MCP E2E, and CLI tests
 ```
 
 ## Development Workflow
@@ -45,5 +47,5 @@ skill-docs/
 ## Submitting Pull Requests
 
 - Keep changes focused and ensure `npm run typecheck && npm run build && npm test` passes with zero errors.
-- Add or update tests in `tests/skill-docs.test.ts` for any new backend or CLI behavior.
+- Keep `README.zh-TW.md` and Traditional Chinese UI copy written in natural Taiwan Traditional Chinese.
 - Never include machine-specific absolute user paths in source files or documentation.

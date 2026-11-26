@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -465,11 +466,57 @@ test('CLI: dist/cli.mjs install, status, and uninstall work cleanly in isolated 
     });
     const statusJson = JSON.parse(statusOut) as { installed: boolean; version: string | null };
     assert.equal(statusJson.installed, true);
-    assert.equal(statusJson.version, '1.0.0');
+    assert.equal(statusJson.version, '1.1.0');
 
     execFileSync(process.execPath, [cliPath, 'uninstall', '--target', targetDir], { stdio: 'pipe' });
     assert.equal(existsSync(targetDir), false);
   } finally {
     rmSync(tmpBase, { recursive: true, force: true });
   }
+});
+
+test('Preferences: uiLang persists cleanly across snapshots', async () => {
+  const env = makeTempEnv();
+  const store = new SkillStore({ ...env, enableWatcher: false });
+  try {
+    assert.equal((await store.getSnapshot(true)).uiLang, undefined);
+    store.setUiLang('en');
+    assert.equal((await store.getSnapshot(true)).uiLang, 'en');
+    store.setUiLang('zh-TW');
+    assert.equal((await store.getSnapshot(true)).uiLang, 'zh-TW');
+  } finally {
+    store.close();
+    env.cleanup();
+  }
+});
+
+test('i18n Guard: README.zh-TW, plugin, UI, and server files contain zero Mainland China terms', () => {
+  const bannedTerms = [
+    '宿主', '去重', '防抖', '倉庫', '納管', '兜底', '默認', '激活', '緩存', '組件',
+    '回調', '調用', '代碼', '信息', '網絡', '硬盤', '菜單', '鼠標', '字節', '痛點',
+    '實戰共現', '文件夾', '配置項', '視圖', '上下文',
+  ];
+
+  const filesToCheck: string[] = [join(projectRoot, 'README.zh-TW.md')];
+  const collectFiles = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) collectFiles(full);
+      else if (/\.(ts|tsx|md|json)$/i.test(entry.name)) filesToCheck.push(full);
+    }
+  };
+  collectFiles(join(projectRoot, 'src'));
+  collectFiles(join(projectRoot, 'plugin'));
+
+  const violations: string[] = [];
+  for (const file of filesToCheck) {
+    const content = readFileSync(file, 'utf-8');
+    for (const term of bannedTerms) {
+      if (content.includes(term)) {
+        violations.push(`${file}: contains banned term "${term}"`);
+      }
+    }
+  }
+  assert.deepEqual(violations, [], `Found Mainland Chinese terms:\n${violations.join('\n')}`);
 });

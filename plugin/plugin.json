@@ -1,14 +1,14 @@
 {
   "name": "skill-docs",
-  "displayName": "Skill 文件庫",
-  "description": "Manage AI Skills as simply as regular documents: single-doc editing with attachments, live linting, Finder folders with skills.json sync, update checks, 365-day usage timeline, and multi-skill collaboration links.",
-  "version": "1.0.0",
+  "displayName": "Better-skills-manager",
+  "description": "Manage AI Agent SKILL.md folders just like regular documents: single-document editing with attachments, live format checks, nested folders with skills.json sync, update checks, 365-day usage heatmap, and multi-skill collaboration map.",
+  "version": "1.1.0",
   "homepage": "https://github.com/southislandoneidlers/better-skills-manager",
   "repository": "https://github.com/southislandoneidlers/better-skills-manager",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "開啟 Skill 文件庫面板，讓我檢視與整理所有 Skills",
-    "幫我檢查目前哪些 Skills 超過 30 天未使用或有重複描述",
-    "打開 Skill 文件庫，檢查現有 Skills 的格式與是否有可用更新"
+    "打開 Better-skills-manager 面板，讓我整理所有 Skills",
+    "幫我檢查有哪些 Skills 超過 30 天沒用過，或是觸發描述有重疊",
+    "用 Better-skills-manager 檢查目前的 Skills 格式與遠端更新"
   ]
 }

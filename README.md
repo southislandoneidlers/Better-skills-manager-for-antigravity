@@ -1,6 +1,6 @@
-# Skill Docs (`skill-docs`)
+# Better-skills-manager
 
-**Manage AI Agent `SKILL.md` bundles as intuitively as regular documents — a native MCP App side-pane & full-page Finder plugin for Google Antigravity.**
+**Manage your AI Agent skills (`SKILL.md` folders) just like regular files in Finder — right inside Google Antigravity.**
 
 [English](./README.md) | [繁體中文](./README.zh-TW.md)
 
@@ -10,40 +10,47 @@
 
 ---
 
-## Why Skill Docs?
+## Preview: How It Looks & Works
 
-AI agent skills (`skills/<name>/SKILL.md` + `scripts/` + `references/`) are powerful, but managing them in a file explorer feels nothing like managing regular documents:
+Before installing anything, here is how **Better-skills-manager** organizes your skills inside Antigravity's side pane or full-page sidebar view (with built-in **English / 繁體中文** switching in the top bar):
 
-1. **Multi-file folder sprawl**: Every skill is a directory tree rather than a single document, making edits and attachment inspection tedious.
-2. **Flat 1-level scan limits**: Antigravity discovers skills only one directory deep inside `skills/`. Organizing skills into category folders like `frontend/` or `automation/` silently hides them unless you hand-maintain `skills.json`.
-3. **Zero lifecycle or usage visibility**: It's hard to tell when a skill was installed or published, whether upstream has updates, how often you actually use it, or which skills collaborate together.
+### 1. Finder-Style Folders + Single-Document Editor
+Browse global, project, and shared skill folders on the left; sort by published/installed dates or 30-day usage in the middle; and edit `SKILL.md` plus its `scripts/` and `references/` attachments on one screen on the right.
 
-**Skill Docs** solves all three directly inside Antigravity's **Auxiliary Side Pane** and **Left Sidebar Global View**.
+![Better-skills-manager Finder and Document Editor](./docs/assets/preview-finder-en.png)
+
+### 2. 365-Day Usage Heatmap & Idle Diagnostics
+See which skills you actually rely on across real conversation logs (`Total` and `30d` counts, exact timestamps, and skills sitting unused for more than 30 days).
+
+![Better-skills-manager Usage Timeline](./docs/assets/preview-analytics-en.png)
+
+### 3. Multi-Skill Collaboration & Overlap Map
+Spot skills that reference each other, frequently run together in the same conversation, or have overlapping trigger descriptions that might confuse the agent.
+
+![Better-skills-manager Collaboration Graph](./docs/assets/preview-graph-en.png)
 
 ---
 
-## Key Features
+## Why I Built This
 
-- **Single-Document Experience + Embedded Attachments**
-  - Any folder containing `SKILL.md` is treated as **one document (`📄`)**.
-  - Edit `name`, `description`, `version`, and Markdown body in a structured form (with 400ms debounced auto-save and lossless YAML preservation) or toggle raw `SKILL.md` mode.
-  - Manage `scripts/`, `references/`, `examples/`, and `resources/` right inside the document's **Attachments** tab, insert relative links in one click, or open natively in Antigravity's `fileView`.
-- **Live Linting + 1-Click Broken Link Fix**
-  - Continuously checks YAML frontmatter syntax, kebab-case naming, duplicate active names, description completeness, and relative Markdown links.
-  - Missing `./scripts/...` or `./references/...` targets show a **`+ Create Attachment`** quick-fix button that generates the stub file (automatically marking `.sh`/`.py` executable).
-- **Finder-Style Nested Folders + Safe Archiving**
-  - Create arbitrary nested category folders (`📁`) and drag-and-drop skills between them.
-  - Automatically reconciles `skills.json` `entries` while **preserving all existing `inherits` and external `entries`**.
-  - Toggle skills on/off without deleting files: disabled skills move to `_disabled/<category>/<skill>/` and remember their original folder upon re-enabling.
-- **Lifecycle Dates, Update Checks & 2-Way Finder Sync**
-  - Displays **Published** and **Installed** dates for every skill.
-  - One-click **`🔄 Check Updates`** compares Git/GitHub remotes (`git ls-remote`) or local upstream directories (SHA-256 content fingerprint) and supports **`⬆️ Apply Update`** with automatic pre-update backups (`_backups/`).
-  - Real-time `fs.watch` synchronization updates the UI within ~1–2 seconds whenever you drop or edit skills in macOS Finder or your external editor.
-- **Usage Frequency & 365-Day Activity Timeline**
-  - Incrementally scans local conversation logs (`transcript_full.jsonl`) and panel attaches with 5-minute deduplication.
-  - Adds sortable **Total Uses** and **Last 30 Days** columns, idle diagnostics (>30 days unused), a **365-day calendar heatmap**, and exact activation timestamps.
-- **Multi-Skill Collaboration & Overlap Graph**
-  - Automatically detects relationships across skills via **Explicit References**, **Historical Co-Usage**, **Shared Domain/Tools**, and **⚠️ Trigger Description Overlap Warnings**, with an interactive SVG network graph and one-click group attach to chat.
+Every AI agent skill is actually a small directory (`skills/<name>/SKILL.md` plus `scripts/`, `references/`, `examples/`), which makes day-to-day housekeeping awkward in a regular file browser:
+
+- **Too many nested folders**: Opening a skill in Finder shows internal helper folders instead of a clean document with attachments.
+- **1-level scan limit**: Antigravity only scans one level deep under `skills/`. The moment you group skills into tidy folders like `frontend/react/`, the agent stops seeing them unless you manually maintain `skills.json`.
+- **Hard to track health & history**: Without digging through logs or git remotes, you can't tell when a skill was installed, whether upstream updated it, whether a script link is broken, or if two skills overlap.
+
+**Better-skills-manager** sits right inside Antigravity (`aux_pane` and `global` sidebar) and turns each skill folder into a single manageable document synced two-way with your real files on disk.
+
+---
+
+## What You Can Do
+
+- **Treat every skill folder like one document**: Edit `name`, `description`, `version`, and Markdown body in a form (400ms auto-save, lossless YAML preservation) or switch to raw `SKILL.md`. Manage `scripts/` and `references/` in the **Attachments** tab without leaving the screen.
+- **Catch broken links & fix them in one click**: Checks YAML syntax, kebab-case naming, duplicate active names, description length, and relative Markdown links — missing `./scripts/...` files get a **`+ Create Attachment`** button that creates the stub file (and marks `.sh`/`.py` executable).
+- **Use nested folders without breaking discovery**: Drag skills into multi-level category folders (`📁 frontend/react`). `Better-skills-manager` keeps `skills.json` `entries` updated automatically while leaving your existing `inherits` and external paths untouched.
+- **Pause skills without deleting them**: Flip the switch to move a skill into `_disabled/<original-folder>/`. Turn it back on anytime and it returns to its exact original folder.
+- **Track dates, updates & 2-way Finder changes**: View **Published** and **Installed** dates, check Git/GitHub remotes or local upstream folders for updates (with automatic backups before updating), and see Finder additions or external edits appear automatically within ~1–2 seconds.
+- **Bilingual UI (`EN / 繁中`)**: Switch between English and Traditional Chinese anytime from the top bar.
 
 ---
 
@@ -51,7 +58,7 @@ AI agent skills (`skills/<name>/SKILL.md` + `scripts/` + `references/`) are powe
 
 ```mermaid
 flowchart LR
-    subgraph Host["Antigravity Host"]
+    subgraph Host["Antigravity Window"]
         AuxPane["Right Side Pane (aux_pane)"]
         GlobalView["Left Sidebar Full View (global)"]
         Chat["Chat Context (updateModelContext)"]
@@ -61,13 +68,13 @@ flowchart LR
         Finder["Adaptive Finder (3-Pane / Compact)"]
         Doc["Document & Attachments Editor"]
         Analytics["365-Day Heatmap & Timeline"]
-        Graph["Collaboration Network Graph"]
+        Graph["Collaboration Network Map"]
     end
 
     subgraph Server["Node.js MCP Server (dist/server.mjs)"]
         Store["SkillStore (CRUD + fs.watch)"]
         Linter["Validator (Frontmatter + Link Check)"]
-        Sync["SkillsJsonSync (Nested Categories)"]
+        Sync["SkillsJsonSync (Nested Folders)"]
         Updater["UpdateChecker (Git + Local SHA-256)"]
         Usage["UsageAnalytics (Transcript Scanner)"]
         Rel["RelationshipAnalyzer (Ref + Co-Usage)"]
@@ -87,15 +94,9 @@ flowchart LR
 
 ---
 
-## Quick Start
+## Installation
 
-### Option 1: Install via `npx` (npm)
-
-```bash
-npx -y skill-docs install
-```
-
-### Option 2: Install from Source
+### Install from Source
 
 ```bash
 git clone https://github.com/southislandoneidlers/better-skills-manager.git
@@ -103,28 +104,32 @@ cd better-skills-manager
 ./scripts/install.sh
 ```
 
-> Or on Windows / cross-platform Node:
+> Cross-platform / Windows:
 > ```bash
 > npm install && npm run build && node ./dist/cli.mjs install
 > ```
 
-This installs the plugin into `~/.gemini/config/plugins/skill-docs` (or a custom directory via `--target <dir>`).
+### Or via `npx` (once published to npm)
+
+```bash
+npx -y better-skills-manager install
+```
+
+This installs the plugin to `~/.gemini/config/plugins/skill-docs` (or a custom directory via `--target <dir>`).
 
 ### Opening in Antigravity
 
-- Click **`+`** in the right Auxiliary Pane (or select **Skill 文件庫** in the left sidebar).
-- Or ask your Antigravity agent: *"Open Skill Docs"*.
+- Click **`+`** in the right Auxiliary Pane (or open **Better-skills-manager** from the left sidebar).
+- Or tell the agent: *"Open Better-skills-manager"*.
 
-### Option 3: Use as a Standalone MCP Apps Server
-
-Any MCP Apps-compatible host (`SEP-1865`) can launch the server directly:
+### Using as a Standalone MCP Apps Server
 
 ```json
 {
   "mcpServers": {
-    "skill-docs": {
+    "better-skills-manager": {
       "command": "npx",
-      "args": ["-y", "skill-docs", "mcp"]
+      "args": ["-y", "better-skills-manager", "mcp"]
     }
   }
 }
@@ -132,22 +137,14 @@ Any MCP Apps-compatible host (`SEP-1865`) can launch the server directly:
 
 ---
 
-## CLI Reference
+## CLI Commands
 
 ```text
-skill-docs install [--target <dir>]    Install Antigravity plugin (default: ~/.gemini/config/plugins/skill-docs)
-skill-docs uninstall [--target <dir>]  Uninstall Antigravity plugin (preserves your skills)
-skill-docs status [--target <dir>]     Print JSON installation status
-skill-docs mcp [--data_dir <dir>]      Start the MCP Apps stdio server directly
+better-skills-manager install [--target <dir>]    Install Antigravity plugin
+better-skills-manager uninstall [--target <dir>]  Uninstall plugin (keeps your skills intact)
+better-skills-manager status [--target <dir>]     Print JSON installation status
+better-skills-manager mcp [--data_dir <dir>]      Start the MCP Apps stdio server directly
 ```
-
----
-
-## How Nested Categories & Safe Disabling Work
-
-- **Skill Bundle Detection**: Directories containing `SKILL.md` stop directory traversal so `scripts/` and `references/` remain hidden inside the document's **Attachments** tab.
-- **Category Sync (`skills.json`)**: Directories without `SKILL.md` (excluding `.*` and `_*`) act as category folders. Whenever skills live inside nested folders (e.g. `skills/frontend/react/my-skill`), `SkillsJsonSync` registers `skills/frontend/react` in `skills.json` `entries` while keeping any manual `inherits` or external `entries` untouched.
-- **Non-Destructive Disable (`_disabled/`)**: Disabling a skill moves it into `skills/_disabled/<original-category>/<skill>/` and removes its managed `skills.json` entry. Re-enabling restores it to its exact original folder.
 
 ---
 
@@ -160,8 +157,8 @@ npm run build
 npm test
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for architecture details and contribution guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for codebase layout and contribution notes.
 
 ## License
 
-[MIT](./LICENSE) © Skill Docs Contributors
+[MIT](./LICENSE) © Better-skills-manager Contributors

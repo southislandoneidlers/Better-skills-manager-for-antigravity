@@ -151,12 +151,14 @@ export function analyzeSkillRelationships(
           label: '明確引用',
           detail: `本文件主文或腳本提及「${b.name || b.dirName}」`,
           weight: 0.9,
+          meta: { targetSkillName: b.name || b.dirName, isReverseRef: false },
         });
         reasonsForB.push({
           type: 'explicit_ref',
           label: '被引用協作',
           detail: `被「${a.name || a.dirName}」的說明或腳本點名搭配使用`,
           weight: 0.9,
+          meta: { targetSkillName: a.name || a.dirName, isReverseRef: true },
         });
       }
       if (bRefsA) {
@@ -165,12 +167,14 @@ export function analyzeSkillRelationships(
           label: '明確引用',
           detail: `本文件主文或腳本提及「${a.name || a.dirName}」`,
           weight: 0.9,
+          meta: { targetSkillName: a.name || a.dirName, isReverseRef: false },
         });
         reasonsForA.push({
           type: 'explicit_ref',
           label: '被引用協作',
           detail: `被「${b.name || b.dirName}」的說明或腳本點名搭配使用`,
           weight: 0.9,
+          meta: { targetSkillName: b.name || b.dirName, isReverseRef: true },
         });
       }
 
@@ -180,9 +184,10 @@ export function analyzeSkillRelationships(
       if (coCount > 0) {
         const r: RelationReason = {
           type: 'co_usage',
-          label: '實戰共現',
-          detail: `曾在 ${coCount} 次對話中一起協作執行`,
+          label: '同對話搭配',
+          detail: `曾在 ${coCount} 次對話中一起搭配使用`,
           weight: Math.min(0.95, 0.5 + coCount * 0.15),
+          meta: { coCount },
         };
         reasonsForA.push(r);
         reasonsForB.push(r);
@@ -195,11 +200,13 @@ export function analyzeSkillRelationships(
       const sharedDomainTokens = shared.filter((t) => DOMAIN_KEYWORDS.has(t));
 
       if (simScore >= 0.45) {
+        const simPercent = Math.round(simScore * 100);
         const r: RelationReason = {
           type: 'high_similarity',
           label: '⚠️ 觸發描述重疊',
-          detail: `觸發描述相似度達 ${Math.round(simScore * 100)}%（共同關鍵詞：${shared.slice(0, 5).join(', ')}），建議釐清分工以免 Agent 選錯`,
+          detail: `觸發描述相似度達 ${simPercent}%（共同關鍵詞：${shared.slice(0, 5).join(', ')}），建議釐清分工以免 Agent 選錯`,
           weight: simScore,
+          meta: { simPercent, sharedTokens: shared.slice(0, 5) },
         };
         reasonsForA.push(r);
         reasonsForB.push(r);
@@ -209,6 +216,7 @@ export function analyzeSkillRelationships(
           label: '工具／領域相近',
           detail: `共用領域工具關鍵詞：${sharedDomainTokens.slice(0, 5).join(', ')}`,
           weight: Math.min(0.65, 0.25 + sharedDomainTokens.length * 0.1),
+          meta: { sharedTokens: sharedDomainTokens.slice(0, 5) },
         };
         reasonsForA.push(r);
         reasonsForB.push(r);

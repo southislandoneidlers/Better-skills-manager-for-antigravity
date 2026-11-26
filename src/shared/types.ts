@@ -73,11 +73,20 @@ export interface UsageStats {
   recentEvents: UsageEvent[];
 }
 
+export type UiLang = 'en' | 'zh-TW';
+
 export interface RelationReason {
   type: 'explicit_ref' | 'co_usage' | 'domain_overlap' | 'high_similarity';
   label: string;
   detail: string;
   weight: number;
+  meta?: {
+    targetSkillName?: string;
+    isReverseRef?: boolean;
+    coCount?: number;
+    simPercent?: number;
+    sharedTokens?: string[];
+  };
 }
 
 export interface SkillRelation {
@@ -156,6 +165,7 @@ export interface GlobalAnalyticsSummary {
 export interface SnapshotPayload {
   seq: number;
   generatedAt: string;
+  uiLang?: UiLang;
   scopes: ScopeInfo[];
   folders: CategoryNode[];
   skills: SkillSummary[];

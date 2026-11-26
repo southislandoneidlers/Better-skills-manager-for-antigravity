@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { CategoryNode, ScopeInfo, SkillDetail, SkillSummary } from '../../shared/types.ts';
+import {
+  formatRelationReason,
+  formatScopeLabel,
+  formatSourceMessage,
+  formatValidationIssue,
+  STRINGS,
+  type UiLang,
+} from '../i18n.ts';
 import { Heatmap365 } from './Heatmap365.tsx';
 
 interface DocumentViewProps {
@@ -7,6 +15,7 @@ interface DocumentViewProps {
   scopes: ScopeInfo[];
   folders: CategoryNode[];
   allSkills: SkillSummary[];
+  lang: UiLang;
   isNarrow: boolean;
   canAttachContext: boolean;
   onBack?: () => void;
@@ -71,6 +80,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   scopes,
   folders,
   allSkills,
+  lang,
   isNarrow,
   canAttachContext,
   onBack,
@@ -92,10 +102,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   onAttachToChat,
   onSelectSkill,
 }) => {
+  const t = STRINGS[lang];
   const [subTab, setSubTab] = useState<'doc' | 'attachments' | 'usage' | 'relations'>('doc');
   const [rawMode, setRawMode] = useState(false);
 
-  // Form states synced when switching skill ID
   const [name, setName] = useState(detail.name);
   const [description, setDescription] = useState(detail.description);
   const [version, setVersion] = useState(detail.version || '');
@@ -104,15 +114,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const [rawContent, setRawContent] = useState(detail.rawContent);
   const [saveState, setSaveState] = useState<'saved' | 'dirty' | 'saving'>('saved');
 
-  // Attachment editor states
-  const [selectedAttach, setSelectedAttach] = useState<string | null>(null);
+  const [selectedAttach, setSelectedAttach] = useState<string | null>(detail.attachments[0]?.relPath ?? null);
   const [attachContent, setAttachContent] = useState('');
   const [attachIsBinary, setAttachIsBinary] = useState(false);
   const [attachSize, setAttachSize] = useState(0);
   const [newAttachPath, setNewAttachPath] = useState('');
   const [showNewAttach, setShowNewAttach] = useState(false);
 
-  // Source bind popover
   const [showBindSource, setShowBindSource] = useState(false);
   const [bindType, setBindType] = useState<'git' | 'local_dir' | 'local_original'>(
     detail.sourceMeta.sourceType === 'git' || detail.sourceMeta.sourceType === 'local_dir'
@@ -123,7 +131,6 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     detail.sourceMeta.sourceUrl || detail.sourceMeta.sourceDir || '',
   );
 
-  // Copy scope selector
   const [showCopyMenu, setShowCopyMenu] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
 
@@ -150,7 +157,6 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
       );
       setBindLocation(detail.sourceMeta.sourceUrl || detail.sourceMeta.sourceDir || '');
     } else if (saveState === 'saved') {
-      // External sync update while user wasn't mid-edit
       setName(detail.name);
       setDescription(detail.description);
       setVersion(detail.version || '');
@@ -204,15 +210,19 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
   const scopeCategories = flattenCategories(folders, detail.scopeId);
   const writableScopes = scopes.filter((s) => !s.readOnly);
+  const scopeObj = scopes.find((s) => s.id === detail.scopeId);
+  const scopeDisplay = scopeObj ? formatScopeLabel(scopeObj, lang) : detail.scopeLabel;
 
   const sourceLabel =
     detail.sourceMeta.sourceType === 'builtin'
-      ? '🔒 內建技能'
+      ? t.sourceBuiltin
       : detail.sourceMeta.sourceType === 'git'
-        ? '🔗 Git 遠端'
+        ? t.sourceGit
         : detail.sourceMeta.sourceType === 'local_dir'
-          ? '📂 本機上游'
-          : '📍 本機原創';
+          ? t.sourceLocalDir
+          : t.sourceOriginal;
+
+  const formattedSourceMsg = formatSourceMessage(detail.sourceMeta, lang);
 
   return (
     <div className="doc-pane">
@@ -222,24 +232,24 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             {isNarrow && onBack && (
               <button className="btn btn-sm" onClick={onBack}>
-                ← 返回
+                {t.backBtn}
               </button>
             )}
             <span style={{ fontSize: 15 }}>📄</span>
             <strong style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {detail.name}
             </strong>
-            <span className="badge">{detail.scopeLabel}</span>
+            <span className="badge">{scopeDisplay}</span>
             {!detail.readOnly && (
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                {saveState === 'saving' ? '儲存中…' : saveState === 'dirty' ? '未儲存' : '已自動儲存'}
+                {saveState === 'saving' ? t.saving : saveState === 'dirty' ? t.unsaved : t.saved}
               </span>
             )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {!detail.readOnly && (
-              <label className="switch" title={detail.enabled ? '點擊停用封存' : '點擊重新啟用'}>
+              <label className="switch" title={detail.enabled ? t.toggleTipEnabled : t.toggleTipDisabled}>
                 <input
                   type="checkbox"
                   checked={detail.enabled}
@@ -253,47 +263,46 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <button
                 className="btn btn-sm btn-primary"
                 onClick={() => void onAttachToChat([detail])}
-                title="將此 Skill 附加為對話 Context"
+                title={t.attachToChatTip}
               >
-                📎 附加至對話
+                {t.attachToChat}
               </button>
             )}
 
             <button
               className="btn btn-sm"
               onClick={() => setShowCopyMenu((v) => !v)}
-              title="複製掛載到其他範圍（全域或專案）"
+              title={t.copyToScopeTip}
             >
-              📋 複製掛載
+              {t.copyToScope}
             </button>
 
             <button
               className="btn btn-sm"
               onClick={() => void onRevealInFinder(detail.skillDir)}
-              title="在 macOS Finder 中打開實體目錄"
+              title={t.revealFinderTip}
             >
-              Finder
+              {t.revealFinder}
             </button>
 
             {!detail.readOnly && (
               <button
                 className="btn btn-sm btn-danger"
                 onClick={() => {
-                  if (window.confirm(`確定要刪除 Skill「${detail.name}」嗎？此動作會移除實體目錄。`)) {
+                  if (window.confirm(t.confirmDelete(detail.name))) {
                     void onDelete(detail.id);
                   }
                 }}
               >
-                刪除
+                {t.deleteBtn}
               </button>
             )}
           </div>
         </div>
 
-        {/* Copy to scope menu */}
         {showCopyMenu && (
           <div style={{ marginTop: 8, padding: 8, background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12 }}>複製掛載至：</span>
+            <span style={{ fontSize: 12 }}>{t.copyToLabel}</span>
             {writableScopes.map((sc) => (
               <button
                 key={sc.id}
@@ -303,23 +312,22 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   await onCopyToScope(detail.id, sc.id);
                 }}
               >
-                {sc.label}
+                {formatScopeLabel(sc, lang)}
               </button>
             ))}
           </div>
         )}
 
-        {/* Lifecycle & Update & Category bar */}
         <div className="doc-lifecycle-bar">
-          <span>📅 發布：{formatDateShort(detail.publishedAt)}</span>
-          <span>📥 安裝：{formatDateShort(detail.installedAt)}</span>
+          <span>{t.publishedLabel} {formatDateShort(detail.publishedAt)}</span>
+          <span>{t.installedLabel} {formatDateShort(detail.installedAt)}</span>
           <span className="badge">{sourceLabel}</span>
 
           {detail.sourceMeta.checkStatus === 'update_available' && (
-            <span className="badge badge-warn">⬆️ 有可用更新</span>
+            <span className="badge badge-warn">{t.updateAvailable}</span>
           )}
           {detail.sourceMeta.checkStatus === 'up_to_date' && (
-            <span className="badge badge-ok">✅ 已是最新</span>
+            <span className="badge badge-ok">{t.upToDate}</span>
           )}
 
           {!detail.readOnly && (
@@ -336,7 +344,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   }
                 }}
               >
-                🔄 檢查更新
+                {t.checkUpdates}
               </button>
 
               {detail.sourceMeta.hasUpdate && (
@@ -352,7 +360,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     }
                   }}
                 >
-                  ⬆️ 立即更新
+                  {t.applyUpdate}
                 </button>
               )}
 
@@ -360,17 +368,17 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 className="btn btn-sm"
                 onClick={() => setShowBindSource((v) => !v)}
               >
-                來源設定
+                {t.sourceSettings}
               </button>
 
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-                📁 分類：
+                {t.folderLabel}
                 <select
                   value={detail.categoryPath}
                   onChange={(e) => void onMoveCategory(detail.id, e.target.value)}
                   style={{ padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-1)', background: 'var(--bg-1)' }}
                 >
-                  <option value="">(根目錄)</option>
+                  <option value="">{t.rootFolder}</option>
                   {scopeCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
@@ -382,10 +390,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           )}
         </div>
 
-        {detail.sourceMeta.checkMessage && (
+        {formattedSourceMsg && (
           <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-            更新狀態：{detail.sourceMeta.checkMessage}
-            {detail.sourceMeta.lastCheckedAt ? `（上次檢查：${formatDateTime(detail.sourceMeta.lastCheckedAt)}）` : ''}
+            {t.updateStatusPrefix} {formattedSourceMsg}
+            {detail.sourceMeta.lastCheckedAt ? ` (${t.lastCheckedPrefix} ${formatDateTime(detail.sourceMeta.lastCheckedAt)})` : ''}
           </div>
         )}
 
@@ -397,9 +405,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 onChange={(e) => setBindType(e.target.value as 'git' | 'local_dir' | 'local_original')}
                 style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border-1)', background: 'var(--bg-1)' }}
               >
-                <option value="git">Git / GitHub 遠端網址</option>
-                <option value="local_dir">本機上游目錄路徑</option>
-                <option value="local_original">設為本機原創（無上游）</option>
+                <option value="git">{t.sourceGitOpt}</option>
+                <option value="local_dir">{t.sourceLocalOpt}</option>
+                <option value="local_original">{t.sourceOriginalOpt}</option>
               </select>
               {bindType !== 'local_original' && (
                 <input
@@ -421,7 +429,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   setShowBindSource(false);
                 }}
               >
-                套用並檢查
+                {t.applyAndCheck}
               </button>
             </div>
           </div>
@@ -431,52 +439,54 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
       {/* Sub-tabs */}
       <div className="doc-subtabs">
         <button className={`subtab ${subTab === 'doc' ? 'active' : ''}`} onClick={() => setSubTab('doc')}>
-          📄 文件內容
+          {t.subTabDoc}
         </button>
         <button className={`subtab ${subTab === 'attachments' ? 'active' : ''}`} onClick={() => setSubTab('attachments')}>
-          📎 附件夾 ({detail.attachments.length})
+          {t.subTabAttach} ({detail.attachments.length})
         </button>
         <button className={`subtab ${subTab === 'usage' ? 'active' : ''}`} onClick={() => setSubTab('usage')}>
-          📊 使用紀錄 (總 {detail.totalUses} / 30天 {detail.last30dUses})
+          {t.subTabUsage} ({detail.totalUses} / {detail.last30dUses})
         </button>
         <button className={`subtab ${subTab === 'relations' ? 'active' : ''}`} onClick={() => setSubTab('relations')}>
-          🔗 協作關聯 ({detail.relations.length})
+          {t.subTabRelations} ({detail.relations.length})
         </button>
       </div>
 
       {/* Body */}
       <div className="doc-body">
-        {/* Validation Health Banner */}
         {detail.issues.length === 0 ? (
           <div className="issue-banner ok">
-            ✅ 格式合格 — Frontmatter 與附件連結皆完整，可被 Agent 正常載入
+            {t.healthOk}
           </div>
         ) : (
           <div className={`issue-banner ${detail.validationStatus === 'error' ? 'err' : 'warn'}`}>
             <strong style={{ display: 'block', marginBottom: 4 }}>
-              {detail.validationStatus === 'error' ? '❌ 格式異常（需修正）' : '⚠️ 格式建議優化'}
+              {detail.validationStatus === 'error' ? t.healthErr : t.healthWarn}
             </strong>
-            {detail.issues.map((issue, idx) => (
-              <div key={`${issue.code}-${idx}`} className="issue-item">
-                <span>• {issue.message}</span>
-                {!detail.readOnly && issue.code === 'broken_link' && issue.missingRelPath && (
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={() => void onFixIssue(detail.id, 'create_attachment', issue.missingRelPath)}
-                  >
-                    {issue.fixLabel || '+ 一鍵建立此附件'}
-                  </button>
-                )}
-                {!detail.readOnly && (issue.code === 'invalid_name' || issue.code === 'missing_name') && (
-                  <button
-                    className="btn btn-sm btn-warn"
-                    onClick={() => void onFixIssue(detail.id, 'slugify_name')}
-                  >
-                    {issue.fixLabel || '修正命名'}
-                  </button>
-                )}
-              </div>
-            ))}
+            {detail.issues.map((issue, idx) => {
+              const fmt = formatValidationIssue(issue, lang);
+              return (
+                <div key={`${issue.code}-${idx}`} className="issue-item">
+                  <span>• {fmt.message}</span>
+                  {!detail.readOnly && issue.code === 'broken_link' && issue.missingRelPath && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => void onFixIssue(detail.id, 'create_attachment', issue.missingRelPath)}
+                    >
+                      {fmt.fixLabel}
+                    </button>
+                  )}
+                  {!detail.readOnly && (issue.code === 'invalid_name' || issue.code === 'missing_name') && (
+                    <button
+                      className="btn btn-sm btn-warn"
+                      onClick={() => void onFixIssue(detail.id, 'slugify_name')}
+                    >
+                      {fmt.fixLabel}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -486,15 +496,15 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
                 {detail.extraFrontmatterKeys.length > 0
-                  ? `保留其他 YAML 欄位：${detail.extraFrontmatterKeys.join(', ')}`
-                  : '單一文件檢視（自動維持合法 SKILL.md 結構）'}
+                  ? t.preservedYaml(detail.extraFrontmatterKeys)
+                  : t.singleDocHint}
               </span>
               <div className="tab-group">
                 <button className={`tab-btn ${!rawMode ? 'active' : ''}`} onClick={() => setRawMode(false)}>
-                  文件表單
+                  {t.modeForm}
                 </button>
                 <button className={`tab-btn ${rawMode ? 'active' : ''}`} onClick={() => setRawMode(true)}>
-                  原始碼 SKILL.md
+                  {t.modeRaw}
                 </button>
               </div>
             </div>
@@ -503,7 +513,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8 }}>
                   <div className="field-group">
-                    <div className="field-label">Skill 識別名稱 (name)</div>
+                    <div className="field-label">{t.fieldSkillName}</div>
                     <input
                       className="input-text"
                       disabled={detail.readOnly}
@@ -517,7 +527,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     />
                   </div>
                   <div className="field-group">
-                    <div className="field-label">版本 (選填)</div>
+                    <div className="field-label">{t.fieldVersion}</div>
                     <input
                       className="input-text"
                       disabled={detail.readOnly}
@@ -535,8 +545,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
                 <div className="field-group">
                   <div className="field-label">
-                    <span>觸發描述 (description — Agent 依此判斷何時使用)</span>
-                    <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>{description.length} 字</span>
+                    <span>{t.fieldDescription}</span>
+                    <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>{t.charsCount(description.length)}</span>
                   </div>
                   <textarea
                     className="textarea-text"
@@ -554,13 +564,12 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
                 <div className="field-group">
                   <div className="field-label">
-                    <span>操作指令與規範正文 (Markdown)</span>
+                    <span>{t.fieldBody}</span>
                     <button
                       className="btn btn-sm"
                       onClick={() => void onOpenNativeFile(detail.skillMdPath)}
-                      title="在 Antigravity 原生檔案檢視器中開啟"
                     >
-                      在編輯器分頁開啟
+                      {t.openInEditor}
                     </button>
                   </div>
                   <textarea
@@ -598,7 +607,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                         setSaveState('saved');
                       }}
                     >
-                      儲存原始 SKILL.md
+                      {t.saveRawBtn}
                     </button>
                   </div>
                 )}
@@ -612,11 +621,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
-                所有 scripts/、references/、examples/ 附屬檔案皆集中於此管理
+                {t.attachIntro}
               </span>
               {!detail.readOnly && (
                 <button className="btn btn-sm btn-primary" onClick={() => setShowNewAttach((v) => !v)}>
-                  + 新增附件檔案
+                  {t.newAttachBtn}
                 </button>
               )}
             </div>
@@ -626,7 +635,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <input
                   className="input-text"
                   style={{ flex: 1, minWidth: 180 }}
-                  placeholder="例如：scripts/setup.sh 或 references/api.md"
+                  placeholder={t.newAttachPlaceholder}
                   value={newAttachPath}
                   onChange={(e) => setNewAttachPath(e.target.value)}
                 />
@@ -641,14 +650,14 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     setShowNewAttach(false);
                   }}
                 >
-                  建立
+                  {t.createBtn}
                 </button>
               </div>
             )}
 
             {detail.attachments.length === 0 ? (
               <div className="card-box" style={{ color: 'var(--text-2)' }}>
-                此 Skill 目前沒有額外附件檔案。你可以按上方「+ 新增附件檔案」，或在主文寫入相對連結後一鍵建立。
+                {t.noAttachMsg}
               </div>
             ) : (
               <div className="attachments-grid">
@@ -678,20 +687,20 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                               className="btn btn-sm"
                               onClick={async () => {
                                 const linkMd = `[${selectedAttach.split('/').pop()}](./${selectedAttach})`;
-                                const nextBody = `${body.trimEnd()}\n\n- 附件：${linkMd}\n`;
+                                const nextBody = `${body.trimEnd()}\n\n- ${linkMd}\n`;
                                 setBody(nextBody);
                                 await flushStructuredSave({ name, description, version, repository, body: nextBody });
                                 setSubTab('doc');
                               }}
                             >
-                              插入連結至主文
+                              {t.insertLinkBtn}
                             </button>
                           )}
                           <button
                             className="btn btn-sm"
                             onClick={() => void onRevealInFinder(`${detail.skillDir}/${selectedAttach}`)}
                           >
-                            Finder
+                            {t.revealFinder}
                           </button>
                           {!detail.readOnly && (
                             <button
@@ -701,7 +710,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                                 setSelectedAttach(null);
                               }}
                             >
-                              刪除
+                              {t.deleteBtn}
                             </button>
                           )}
                         </div>
@@ -709,7 +718,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
                       {attachIsBinary ? (
                         <div style={{ padding: 16, color: 'var(--text-2)', textAlign: 'center' }}>
-                          二進位或媒體檔案（{attachSize} bytes），可使用 Finder 開啟預覽。
+                          {t.binaryFileMsg(attachSize)}
                         </div>
                       ) : (
                         <>
@@ -725,7 +734,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                                 className="btn btn-sm btn-primary"
                                 onClick={() => void onSaveAttachment(detail.id, selectedAttach, attachContent)}
                               >
-                                儲存附件變更
+                                {t.saveAttachBtn}
                               </button>
                             </div>
                           )}
@@ -733,7 +742,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                       )}
                     </>
                   ) : (
-                    <div style={{ color: 'var(--text-2)' }}>請在左側選取附件進行檢視或編輯。</div>
+                    <div style={{ color: 'var(--text-2)' }}>{t.selectAttachHint}</div>
                   )}
                 </div>
               </div>
@@ -747,38 +756,39 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="stat-grid">
               <div className="stat-card">
                 <div className="stat-value">{detail.totalUses}</div>
-                <div className="stat-label">總使用次數</div>
+                <div className="stat-label">{t.usageTotalCard}</div>
               </div>
               <div className="stat-card">
                 <div className="stat-value" style={{ color: 'var(--ok)' }}>{detail.last30dUses}</div>
-                <div className="stat-label">近 30 天使用次數</div>
+                <div className="stat-label">{t.usage30dCard}</div>
               </div>
               <div className="stat-card">
                 <div className="stat-value" style={{ fontSize: 14 }}>
-                  {detail.idleDays === null ? '從未使用' : detail.idleDays === 0 ? '今天使用過' : `${detail.idleDays} 天前`}
+                  {detail.idleDays === null ? t.neverUsed : detail.idleDays === 0 ? t.usedToday : t.daysAgo(detail.idleDays)}
                 </div>
-                <div className="stat-label">最後活躍距今</div>
+                <div className="stat-label">{t.usageIdleCard}</div>
               </div>
             </div>
 
             <Heatmap365
               dailyCounts365={detail.usage.dailyCounts365}
-              title={`「${detail.name}」過去 365 天使用時間分佈`}
+              title={`${detail.name} — ${t.heatmapDefaultTitle}`}
+              lang={lang}
             />
 
             <div className="card-box">
-              <strong style={{ display: 'block', marginBottom: 6 }}>每次使用時間點明細 ({detail.usage.recentEvents.length})</strong>
+              <strong style={{ display: 'block', marginBottom: 6 }}>{t.usageEventsTitle(detail.usage.recentEvents.length)}</strong>
               {detail.usage.recentEvents.length === 0 ? (
                 <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
-                  目前尚未有此 Skill 的歷史觸發紀錄。
+                  {t.noUsageEvents}
                 </div>
               ) : (
                 <table className="table-clean">
                   <thead>
                     <tr>
-                      <th>時間點</th>
-                      <th>觸發方式</th>
-                      <th>對話 ID</th>
+                      <th>{t.colTimestamp}</th>
+                      <th>{t.colTriggerSource}</th>
+                      <th>{t.colConvId}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -805,7 +815,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
-                系統依據主文引用、歷史同對話共現與領域相似度自動計算協作關聯。
+                {t.relationsIntro}
               </span>
               {canAttachContext && detail.relations.length > 0 && (
                 <button
@@ -818,49 +828,54 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     void onAttachToChat([detail, ...targets]);
                   }}
                 >
-                  📎 將此 Skill 與協作組附加至對話
+                  {t.attachGroupBtn}
                 </button>
               )}
             </div>
 
             {detail.relations.length === 0 ? (
               <div className="card-box" style={{ color: 'var(--text-2)' }}>
-                尚未偵測到與其他 Skill 的明顯引用、共現或領域重疊關聯。
+                {t.noRelationsMsg}
               </div>
             ) : (
-              detail.relations.map((rel) => (
-                <div key={rel.targetId} className="card-box">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <strong>📄 {rel.targetName}</strong>
-                      <span className="badge">{rel.targetScopeLabel}</span>
-                      {rel.reasons.map((r, idx) => (
-                        <span
-                          key={idx}
-                          className={`badge ${
-                            r.type === 'high_similarity'
-                              ? 'badge-warn'
-                              : r.type === 'co_usage'
-                                ? 'badge-ok'
-                                : 'badge-info'
-                          }`}
-                        >
-                          {r.label}
-                        </span>
-                      ))}
+              detail.relations.map((rel) => {
+                const targetScope = scopes.find((s) => s.id === rel.targetScopeId);
+                const targetScopeDisplay = targetScope ? formatScopeLabel(targetScope, lang) : rel.targetScopeLabel;
+                const formatted = rel.reasons.map((r) => ({ type: r.type, ...formatRelationReason(r, lang) }));
+                return (
+                  <div key={rel.targetId} className="card-box">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <strong>📄 {rel.targetName}</strong>
+                        <span className="badge">{targetScopeDisplay}</span>
+                        {formatted.map((r, idx) => (
+                          <span
+                            key={idx}
+                            className={`badge ${
+                              r.type === 'high_similarity'
+                                ? 'badge-warn'
+                                : r.type === 'co_usage'
+                                  ? 'badge-ok'
+                                  : 'badge-info'
+                            }`}
+                          >
+                            {r.label}
+                          </span>
+                        ))}
+                      </div>
+                      <button className="btn btn-sm" onClick={() => onSelectSkill(rel.targetId)}>
+                        {t.openSkillBtn}
+                      </button>
                     </div>
-                    <button className="btn btn-sm" onClick={() => onSelectSkill(rel.targetId)}>
-                      開啟此 Skill →
-                    </button>
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 6 }}>
+                      {rel.targetDescription}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
+                      {t.relBasisPrefix} {formatted.map((r) => r.detail).join(' · ')}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 6 }}>
-                    {rel.targetDescription}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                    關聯依據：{rel.reasons.map((r) => r.detail).join('；')}
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

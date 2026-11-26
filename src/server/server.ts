@@ -68,9 +68,9 @@ export function createSkillDocsServer(store: SkillStore): Server {
   const TOOLS = [
     {
       name: 'open_skill_docs',
-      title: 'Skill 文件庫',
+      title: 'Better-skills-manager',
       description:
-        '開啟「Skill 文件庫（Skill Docs）」互動式管理面板，像管理一般文件一樣管理 Skills、分類資料夾、格式健檢、更新檢查、使用時間軸與多技能協作關聯。所有參數皆為選填。',
+        '開啟「Better-skills-manager」互動式管理面板，像管理一般文件一樣管理 Skills、分類資料夾、格式檢查、更新檢查、使用時間軸與多技能搭配關係。所有參數皆為選填。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -79,7 +79,7 @@ export function createSkillDocsServer(store: SkillStore): Server {
           tab: {
             type: 'string',
             enum: ['finder', 'analytics', 'graph'],
-            description: '預設開啟的分頁視圖',
+            description: '預設開啟的分頁畫面',
           },
         },
       },
@@ -90,16 +90,16 @@ export function createSkillDocsServer(store: SkillStore): Server {
         },
         'com.google.antigravity/ui': {
           entrypoints: [
-            { type: 'aux_pane', title: 'Skill 文件庫' },
-            { type: 'global', title: 'Skill 文件庫' },
+            { type: 'aux_pane', title: 'Better-skills-manager' },
+            { type: 'global', title: 'Better-skills-manager' },
           ],
         },
       },
     },
     {
       name: 'list_managed_skills',
-      title: '列出受管 Skills 摘要',
-      description: '查詢本機全域、專案與通用目錄下的 Skills 狀態、格式健檢、30天使用次數與協作關聯摘要。',
+      title: '列出已收錄 Skills 摘要',
+      description: '查詢本機全域、專案與通用目錄下的 Skills 狀態、格式檢查、30 天使用次數與搭配關聯摘要。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -341,8 +341,8 @@ export function createSkillDocsServer(store: SkillStore): Server {
     },
     {
       name: 'app_manage_scopes',
-      title: '管理納管專案或外部目錄',
-      description: '新增或移除額外納管的專案 Workspace 或外部通用 Skill 資料夾。',
+      title: '管理已收錄專案或外部目錄',
+      description: '新增或移除額外收錄的專案 Workspace 或外部通用 Skill 資料夾。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -351,6 +351,19 @@ export function createSkillDocsServer(store: SkillStore): Server {
           label: { type: 'string' },
         },
         required: ['action', 'path'],
+      },
+      _meta: APP_ONLY_META,
+    },
+    {
+      name: 'app_set_preferences',
+      title: '儲存介面語系偏好',
+      description: '儲存使用者的介面語言設定（en 或 zh-TW）。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          uiLang: { type: 'string', enum: ['en', 'zh-TW'] },
+        },
+        required: ['uiLang'],
       },
       _meta: APP_ONLY_META,
     },
@@ -438,7 +451,7 @@ export function createSkillDocsServer(store: SkillStore): Server {
           const userSkills = snapshot.skills.filter((s) => !s.readOnly);
           const issueCount = userSkills.filter((s) => s.validationStatus !== 'ok').length;
           return textResult(
-            `已開啟「Skill 文件庫」：目前納管 ${userSkills.length} 份自訂／專案 Skill（另有 ${snapshot.skills.length - userSkills.length} 份內建參考），共 ${issueCount} 份待檢查項目。`,
+            `已開啟「Better-skills-manager」：目前收錄 ${userSkills.length} 份自訂／專案 Skill（另有 ${snapshot.skills.length - userSkills.length} 份內建參考），共 ${issueCount} 份待檢查項目。`,
             {
               initialScopeId: typeof args.scopeId === 'string' ? args.scopeId : undefined,
               initialSkillId: typeof args.skillId === 'string' ? args.skillId : undefined,
@@ -467,7 +480,7 @@ export function createSkillDocsServer(store: SkillStore): Server {
               `- ${s.name} [${s.scopeLabel}${s.categoryPath ? ` / ${s.categoryPath}` : ''}] (${s.enabled ? '啟用' : '停用'}, ${s.validationStatus}, 總使用 ${s.totalUses} / 30天 ${s.last30dUses})`,
           );
           return textResult(
-            lines.length ? `受管 Skills 清單：\n${lines.join('\n')}` : '目前沒有符合條件的受管 Skills。',
+            lines.length ? `已收錄 Skills 清單：\n${lines.join('\n')}` : '目前沒有符合條件的 Skills。',
             { skills: filtered, scopes: snapshot.scopes },
           );
         }
@@ -635,7 +648,14 @@ export function createSkillDocsServer(store: SkillStore): Server {
             path: String(args.path ?? ''),
             label: typeof args.label === 'string' ? args.label : undefined,
           });
-          return textResult('已更新納管目錄', { snapshot });
+          return textResult('已更新目錄清單', { snapshot });
+        }
+
+        case 'app_set_preferences': {
+          const uiLang = args.uiLang === 'en' ? 'en' : 'zh-TW';
+          store.setUiLang(uiLang);
+          const snapshot = await store.getSnapshot(true);
+          return textResult(`uiLang=${uiLang}`, { uiLang, snapshot });
         }
 
         case 'app_record_panel_attach': {

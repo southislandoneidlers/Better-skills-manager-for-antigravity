@@ -1,29 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import type { SnapshotPayload } from '../../shared/types.ts';
+import { formatScopeLabel, STRINGS, type UiLang } from '../i18n.ts';
 import { Heatmap365 } from './Heatmap365.tsx';
 
 interface AnalyticsViewProps {
   snapshot: SnapshotPayload;
+  lang: UiLang;
   onSelectSkill: (skillId: string) => void;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  read_file: 'Agent 自動讀取',
-  slash_command: '斜線指令 /',
-  mention: '@ 提及引用',
-  panel_attach: '面板附加至對話',
-};
-
-function formatDateTime(iso?: string): string {
-  if (!iso) return '尚未紀錄';
+function formatDateTime(iso: string | undefined, neverText: string): string {
+  if (!iso) return neverText;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelectSkill }) => {
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, lang, onSelectSkill }) => {
+  const t = STRINGS[lang];
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'idle'>('all');
+
+  const scopeMap = useMemo(() => {
+    const m = new Map(snapshot.scopes.map((sc) => [sc.id, formatScopeLabel(sc, lang)]));
+    return m;
+  }, [snapshot.scopes, lang]);
 
   const sortedByUsage = useMemo(() => {
     const list = [...snapshot.skills];
@@ -41,50 +42,59 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelect
   const idleCount = snapshot.analytics.idleSkillIds.length;
   const active30dSkills = snapshot.skills.filter((s) => s.last30dUses > 0).length;
 
+  const sourceLabel = (src: string) => {
+    if (src === 'read_file') return t.srcReadFile;
+    if (src === 'slash_command') return t.srcSlash;
+    if (src === 'mention') return t.srcMention;
+    if (src === 'panel_attach') return t.srcPanelAttach;
+    return src;
+  };
+
   return (
     <div className="scroll-y" style={{ padding: 14, width: '100%' }}>
       <div className="stat-grid">
         <div className="stat-card">
           <div className="stat-value">{snapshot.analytics.totalActivations}</div>
-          <div className="stat-label">累積總使用次數</div>
+          <div className="stat-label">{t.analyticsTotalCard}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: 'var(--ok)' }}>
             {snapshot.analytics.last30dActivations}
           </div>
-          <div className="stat-label">近 30 天使用次數</div>
+          <div className="stat-label">{t.analytics30dCard}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: 'var(--accent)' }}>
             {active30dSkills} / {snapshot.skills.length}
           </div>
-          <div className="stat-label">近 30 天活躍 Skills</div>
+          <div className="stat-label">{t.analyticsActiveCard}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: idleCount > 0 ? 'var(--warn)' : 'var(--ok)' }}>
             {idleCount}
           </div>
-          <div className="stat-label">超過 30 天未使用（閒置）</div>
+          <div className="stat-label">{t.analyticsIdleCard}</div>
         </div>
       </div>
 
       <Heatmap365
         dailyCounts365={snapshot.analytics.dailyCounts365}
-        title="全技能庫 365 天使用頻率熱力圖"
+        title={t.analyticsGlobalHeatmap}
+        lang={lang}
       />
 
       <div className="card-box">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-          <strong>各 Skill 使用頻率與閒置診斷</strong>
+          <strong>{t.analyticsDiagTitle}</strong>
           <div className="tab-group">
             <button className={`tab-btn ${filterMode === 'all' ? 'active' : ''}`} onClick={() => setFilterMode('all')}>
-              全部 ({snapshot.skills.length})
+              {t.analyticsFilterAll(snapshot.skills.length)}
             </button>
             <button className={`tab-btn ${filterMode === 'active' ? 'active' : ''}`} onClick={() => setFilterMode('active')}>
-              近 30 天活躍 ({active30dSkills})
+              {t.analyticsFilterActive(active30dSkills)}
             </button>
             <button className={`tab-btn ${filterMode === 'idle' ? 'active' : ''}`} onClick={() => setFilterMode('idle')}>
-              閒置待整理 ({idleCount})
+              {t.analyticsFilterIdle(idleCount)}
             </button>
           </div>
         </div>
@@ -92,12 +102,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelect
         <table className="table-clean">
           <thead>
             <tr>
-              <th>Skill</th>
-              <th>範圍</th>
-              <th>總次數</th>
-              <th>近 30 天</th>
-              <th>最後使用時間</th>
-              <th>狀態</th>
+              <th>{t.colSkill}</th>
+              <th>{t.colScope}</th>
+              <th>{t.colTotalUses}</th>
+              <th>{t.col30dUses}</th>
+              <th>{t.colLastUsed}</th>
+              <th>{t.colHealthState}</th>
             </tr>
           </thead>
           <tbody>
@@ -110,17 +120,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelect
                 <td>
                   <strong>{s.name}</strong>
                 </td>
-                <td style={{ color: 'var(--text-2)' }}>{s.scopeLabel}</td>
+                <td style={{ color: 'var(--text-2)' }}>{scopeMap.get(s.scopeId) || s.scopeLabel}</td>
                 <td>{s.totalUses}</td>
                 <td>{s.last30dUses}</td>
-                <td style={{ color: 'var(--text-2)' }}>{formatDateTime(s.lastUsedAt)}</td>
+                <td style={{ color: 'var(--text-2)' }}>{formatDateTime(s.lastUsedAt, t.neverUsed)}</td>
                 <td>
                   {s.idleDays === null ? (
-                    <span className="badge badge-warn">從未使用</span>
+                    <span className="badge badge-warn">{t.neverUsed}</span>
                   ) : s.idleDays >= 30 ? (
-                    <span className="badge badge-warn">閒置 {s.idleDays} 天</span>
+                    <span className="badge badge-warn">{t.idleDaysBadge(s.idleDays)}</span>
                   ) : (
-                    <span className="badge badge-ok">活躍中</span>
+                    <span className="badge badge-ok">{t.activeBadge}</span>
                   )}
                 </td>
               </tr>
@@ -130,19 +140,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelect
       </div>
 
       <div className="card-box">
-        <strong style={{ display: 'block', marginBottom: 8 }}>近期觸發時間軸明細（真實對話與面板記錄）</strong>
+        <strong style={{ display: 'block', marginBottom: 8 }}>{t.recentTimelineTitle}</strong>
         {snapshot.analytics.recentEvents.length === 0 ? (
           <div style={{ color: 'var(--text-2)', fontSize: 12 }}>
-            尚未偵測到歷史對話觸發紀錄。當你在對話中使用 Skill 或點擊「附加至對話」時，這裡會精確記錄每一次的時間點與來源。
+            {t.noGlobalEvents}
           </div>
         ) : (
           <table className="table-clean">
             <thead>
               <tr>
-                <th>精確時間點</th>
-                <th>Skill</th>
-                <th>觸發方式</th>
-                <th>對話 ID</th>
+                <th>{t.colTimestamp}</th>
+                <th>{t.colSkill}</th>
+                <th>{t.colTriggerSource}</th>
+                <th>{t.colConvId}</th>
               </tr>
             </thead>
             <tbody>
@@ -152,12 +162,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ snapshot, onSelect
                   style={{ cursor: ev.skillId ? 'pointer' : 'default' }}
                   onClick={() => ev.skillId && onSelectSkill(ev.skillId)}
                 >
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{formatDateTime(ev.timestamp)}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{formatDateTime(ev.timestamp, '—')}</td>
                   <td>
                     <strong>{ev.skillName}</strong>
                   </td>
                   <td>
-                    <span className="badge">{SOURCE_LABELS[ev.source] || ev.source}</span>
+                    <span className="badge">{sourceLabel(ev.source)}</span>
                   </td>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-2)' }}>
                     {ev.conversationId.slice(0, 12)}

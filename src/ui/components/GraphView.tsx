@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import type { SkillSummary, SnapshotPayload } from '../../shared/types.ts';
+import { formatRelationReason, STRINGS, type UiLang } from '../i18n.ts';
 
 interface GraphViewProps {
   snapshot: SnapshotPayload;
+  lang: UiLang;
   onSelectSkill: (skillId: string) => void;
   canAttachContext: boolean;
   onAttachSkills: (skills: SkillSummary[]) => void;
@@ -17,10 +19,12 @@ const REASON_COLOR: Record<string, string> = {
 
 export const GraphView: React.FC<GraphViewProps> = ({
   snapshot,
+  lang,
   onSelectSkill,
   canAttachContext,
   onAttachSkills,
 }) => {
+  const t = STRINGS[lang];
   const [filterType, setFilterType] = useState<'all' | 'explicit_ref' | 'co_usage' | 'high_similarity'>('all');
   const [focusId, setFocusId] = useState<string | null>(null);
 
@@ -51,11 +55,10 @@ export const GraphView: React.FC<GraphViewProps> = ({
     if (ids.size === 0) {
       for (const s of snapshot.skills.slice(0, 12)) ids.add(s.id);
     }
-    const list = [...ids]
+    return [...ids]
       .map((id) => skillMap.get(id))
       .filter((x): x is SkillSummary => Boolean(x))
       .slice(0, 20);
-    return list;
   }, [filteredEdges, snapshot.skills, skillMap]);
 
   const nodePositions = useMemo(() => {
@@ -84,23 +87,23 @@ export const GraphView: React.FC<GraphViewProps> = ({
     <div className="scroll-y" style={{ padding: 14, width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <strong style={{ fontSize: 14 }}>🕸️ 多 Skills 協作關聯網絡</strong>
+          <strong style={{ fontSize: 14 }}>{t.graphTitle}</strong>
           <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-            自動分析「明確引用」「歷史對話共現」「領域重疊與職責衝突」，協助組裝多技能協作流程。
+            {t.graphSubtitle}
           </div>
         </div>
         <div className="tab-group">
           <button className={`tab-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>
-            全部 ({snapshot.graphEdges.length})
+            {t.graphAll(snapshot.graphEdges.length)}
           </button>
           <button className={`tab-btn ${filterType === 'explicit_ref' ? 'active' : ''}`} onClick={() => setFilterType('explicit_ref')}>
-            明確引用
+            {t.graphRef}
           </button>
           <button className={`tab-btn ${filterType === 'co_usage' ? 'active' : ''}`} onClick={() => setFilterType('co_usage')}>
-            實戰共現
+            {t.graphCoUsage}
           </button>
           <button className={`tab-btn ${filterType === 'high_similarity' ? 'active' : ''}`} onClick={() => setFilterType('high_similarity')}>
-            ⚠️ 重疊警示 ({overlapCount})
+            {t.graphOverlap(overlapCount)}
           </button>
         </div>
       </div>
@@ -108,17 +111,17 @@ export const GraphView: React.FC<GraphViewProps> = ({
       {focusId && (
         <div style={{ marginBottom: 8 }}>
           <span className="badge badge-info">
-            僅顯示與「{skillMap.get(focusId)?.name}」相關之連線
+            {t.graphFocusBadge(skillMap.get(focusId)?.name || '')}
           </span>{' '}
           <button className="btn btn-sm" onClick={() => setFocusId(null)}>
-            顯示全部節點
+            {t.graphShowAll}
           </button>
         </div>
       )}
 
       <div className="card-box" style={{ overflowX: 'auto' }}>
         {connectedNodes.length === 0 ? (
-          <div style={{ color: 'var(--text-2)' }}>目前尚未偵測到多技能關聯。</div>
+          <div style={{ color: 'var(--text-2)' }}>{t.graphEmptyNodes}</div>
         ) : (
           <svg viewBox="0 0 580 330" style={{ width: '100%', maxHeight: 320, display: 'block' }}>
             {filteredEdges.map((edge, idx) => {
@@ -139,7 +142,14 @@ export const GraphView: React.FC<GraphViewProps> = ({
                   strokeWidth={Math.max(1.5, edge.score * 3.5)}
                   strokeDasharray={primaryType === 'high_similarity' ? '5 3' : undefined}
                 >
-                  <title>{edge.reasons.map((r) => `${r.label}: ${r.detail}`).join(' | ')}</title>
+                  <title>
+                    {edge.reasons
+                      .map((r) => {
+                        const fr = formatRelationReason(r, lang);
+                        return `${fr.label}: ${fr.detail}`;
+                      })
+                      .join(' | ')}
+                  </title>
                 </line>
               );
             })}
@@ -171,7 +181,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                     fontWeight={isFocus ? '700' : '500'}
                     fill="var(--text-1)"
                   >
-                    {node.name.length > 18 ? `${node.name.slice(0, 16)}…` : node.name}
+                    {node.name.length > 20 ? `${node.name.slice(0, 18)}…` : node.name}
                   </text>
                 </g>
               );
@@ -179,24 +189,28 @@ export const GraphView: React.FC<GraphViewProps> = ({
           </svg>
         )}
         <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-2)', marginTop: 6, flexWrap: 'wrap' }}>
-          <span>提示：點擊節點可篩選連線，雙擊節點直接開啟文件。</span>
-          <span style={{ color: '#2563eb' }}>● 明確引用</span>
-          <span style={{ color: '#16a34a' }}>● 實戰共現</span>
-          <span style={{ color: '#0284c7' }}>● 領域相近</span>
-          <span style={{ color: '#d97706' }}>┈ 觸發描述重疊</span>
+          <span>{t.graphHint}</span>
+          <span style={{ color: '#2563eb' }}>{t.legendRef}</span>
+          <span style={{ color: '#16a34a' }}>{t.legendCo}</span>
+          <span style={{ color: '#0284c7' }}>{t.legendDomain}</span>
+          <span style={{ color: '#d97706' }}>{t.legendOverlap}</span>
         </div>
       </div>
 
       <div className="card-box">
-        <strong style={{ display: 'block', marginBottom: 8 }}>協作關聯明細 ({filteredEdges.length})</strong>
+        <strong style={{ display: 'block', marginBottom: 8 }}>{t.graphPairsTitle(filteredEdges.length)}</strong>
         {filteredEdges.length === 0 ? (
-          <div style={{ color: 'var(--text-2)', fontSize: 12 }}>此篩選條件下沒有關聯配對。</div>
+          <div style={{ color: 'var(--text-2)', fontSize: 12 }}>{t.graphNoPairs}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filteredEdges.slice(0, 40).map((edge, idx) => {
               const s1 = skillMap.get(edge.sourceId);
               const s2 = skillMap.get(edge.targetId);
               if (!s1 || !s2) return null;
+              const formattedReasons = edge.reasons.map((r) => ({
+                type: r.type,
+                ...formatRelationReason(r, lang),
+              }));
               return (
                 <div
                   key={`${edge.sourceId}-${edge.targetId}-${idx}`}
@@ -221,7 +235,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                       <button className="btn btn-sm" onClick={() => onSelectSkill(s2.id)}>
                         📄 {s2.name}
                       </button>
-                      {edge.reasons.map((r, rIdx) => (
+                      {formattedReasons.map((r, rIdx) => (
                         <span
                           key={rIdx}
                           className={`badge ${r.type === 'high_similarity' ? 'badge-warn' : r.type === 'co_usage' ? 'badge-ok' : 'badge-info'}`}
@@ -231,7 +245,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                       ))}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 4 }}>
-                      {edge.reasons.map((r) => r.detail).join('；')}
+                      {formattedReasons.map((r) => r.detail).join(' · ')}
                     </div>
                   </div>
                   {canAttachContext && (
@@ -239,7 +253,7 @@ export const GraphView: React.FC<GraphViewProps> = ({
                       className="btn btn-sm btn-primary"
                       onClick={() => onAttachSkills([s1, s2])}
                     >
-                      📎 整組附加至對話
+                      {t.attachGroupBtn}
                     </button>
                   )}
                 </div>

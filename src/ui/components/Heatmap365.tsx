@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { STRINGS, type UiLang } from '../i18n.ts';
 
 interface Heatmap365Props {
   dailyCounts365: Record<string, number>;
   title?: string;
+  lang: UiLang;
 }
 
 function toKey(d: Date): string {
@@ -12,14 +14,14 @@ function toKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export const Heatmap365: React.FC<Heatmap365Props> = ({ dailyCounts365, title }) => {
+export const Heatmap365: React.FC<Heatmap365Props> = ({ dailyCounts365, title, lang }) => {
+  const t = STRINGS[lang];
   const [hovered, setHovered] = useState<{ date: string; count: number } | null>(null);
 
   const { weeks, maxCount, activeDays, totalCount } = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Go back 52 weeks + align to Sunday
     const start = new Date(today);
     start.setDate(start.getDate() - 364);
     start.setDate(start.getDate() - start.getDay());
@@ -68,11 +70,11 @@ export const Heatmap365: React.FC<Heatmap365Props> = ({ dailyCounts365, title })
   return (
     <div className="card-box">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-        <strong style={{ fontSize: 12 }}>{title || '過去 365 天使用頻率分佈'}</strong>
+        <strong style={{ fontSize: 12 }}>{title || t.heatmapDefaultTitle}</strong>
         <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
           {hovered
-            ? `${hovered.date}：${hovered.count} 次使用`
-            : `近一年共 ${totalCount} 次（涵蓋 ${activeDays} 天）`}
+            ? t.heatmapHover(hovered.date, hovered.count)
+            : t.heatmapSummary(totalCount, activeDays)}
         </span>
       </div>
       <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
@@ -90,7 +92,7 @@ export const Heatmap365: React.FC<Heatmap365Props> = ({ dailyCounts365, title })
                 onMouseEnter={() => cell.inRange && setHovered({ date: cell.date, count: cell.count })}
                 onMouseLeave={() => setHovered(null)}
               >
-                <title>{`${cell.date}: ${cell.count} 次`}</title>
+                <title>{t.heatmapHover(cell.date, cell.count)}</title>
               </rect>
             )),
           )}

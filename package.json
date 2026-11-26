@@ -1,7 +1,7 @@
 {
-  "name": "skill-docs",
-  "version": "1.0.0",
-  "description": "Manage AI Agent SKILL.md bundles as intuitively as regular documents — Antigravity MCP App side-pane & full-page Finder plugin.",
+  "name": "better-skills-manager",
+  "version": "1.1.0",
+  "description": "Better-skills-manager — Manage AI Agent SKILL.md folders as intuitively as regular documents in Google Antigravity.",
   "license": "MIT",
   "homepage": "https://github.com/southislandoneidlers/better-skills-manager#readme",
   "repository": {
@@ -13,6 +13,7 @@
   },
   "type": "module",
   "bin": {
+    "better-skills-manager": "./dist/cli.mjs",
     "skill-docs": "./dist/cli.mjs"
   },
   "files": [

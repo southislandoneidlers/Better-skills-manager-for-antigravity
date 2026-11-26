@@ -10,16 +10,19 @@ import type {
   SkillDetail,
   SkillSummary,
   SnapshotPayload,
+  UiLang,
 } from '../shared/types.ts';
 import { AnalyticsView } from './components/AnalyticsView.tsx';
 import { DocumentView } from './components/DocumentView.tsx';
 import { GraphView } from './components/GraphView.tsx';
+import { detectInitialLang, formatScopeLabel, STRINGS } from './i18n.ts';
+import { buildPreviewDataset } from './previewData.ts';
 
 type MainTab = 'finder' | 'analytics' | 'graph';
 type FilterKind = 'all' | 'enabled' | 'disabled' | 'issues' | 'updates';
 type SortKey = 'name' | 'publishedAt' | 'installedAt' | 'totalUses' | 'last30dUses';
 
-const mcpApp = new App({ name: 'Skill 文件庫', version: '1.0.0' }, {});
+const mcpApp = new App({ name: 'Better-skills-manager', version: '1.1.0' }, {});
 
 function parseToolResultJson<T>(result: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }): T | null {
   if (result.structuredContent && typeof result.structuredContent === 'object') {
@@ -44,13 +47,26 @@ function formatDateShort(iso?: string): string {
 }
 
 export const AppRoot: React.FC = () => {
-  const [connected, setConnected] = useState(false);
-  const [canUpdateContext, setCanUpdateContext] = useState(false);
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const isPreviewMode = urlParams.get('preview') === '1';
+  const paramLang = urlParams.get('lang');
+  const paramTab = urlParams.get('tab');
+
+  const [lang, setLang] = useState<UiLang>(
+    paramLang === 'en' || paramLang === 'zh-TW' ? paramLang : detectInitialLang(),
+  );
+  const t = STRINGS[lang];
+
+  const [connected, setConnected] = useState(isPreviewMode);
+  const [canUpdateContext, setCanUpdateContext] = useState(isPreviewMode);
   const [snapshot, setSnapshot] = useState<SnapshotPayload | null>(null);
+  const [previewDetails, setPreviewDetails] = useState<Record<string, SkillDetail>>({});
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<SkillDetail | null>(null);
 
-  const [mainTab, setMainTab] = useState<MainTab>('finder');
+  const [mainTab, setMainTab] = useState<MainTab>(
+    paramTab === 'analytics' || paramTab === 'graph' || paramTab === 'finder' ? paramTab : 'finder',
+  );
   const [selectedScopeId, setSelectedScopeId] = useState<string>('ALL_USER');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [filterKind, setFilterKind] = useState<FilterKind>('all');
@@ -64,7 +80,6 @@ export const AppRoot: React.FC = () => {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
 
-  // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newSkillScope, setNewSkillScope] = useState('global');
   const [newSkillCat, setNewSkillCat] = useState('');
@@ -82,6 +97,7 @@ export const AppRoot: React.FC = () => {
   const [scopeLabelInput, setScopeLabelInput] = useState('');
 
   const seqRef = useRef<number>(0);
+  const initializedScopeRef = useRef<boolean>(false);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -91,29 +107,61 @@ export const AppRoot: React.FC = () => {
   const callTool = useCallback(async <T,>(name: string, args: Record<string, unknown> = {}): Promise<T> => {
     const res = await mcpApp.callServerTool({ name, arguments: args });
     if (res.isError) {
-      const msg = res.content?.find((c) => c.type === 'text')?.text || '操作失敗';
+      const msg = res.content?.find((c) => c.type === 'text')?.text || 'Operation failed';
       throw new Error(msg);
     }
     const parsed = parseToolResultJson<T>(res as never);
-    if (!parsed) throw new Error('伺服器未回傳有效資料');
+    if (!parsed) throw new Error('Invalid server response');
     return parsed;
   }, []);
 
   const loadSnapshot = useCallback(async (forceRefresh = false) => {
     const res = await callTool<{ snapshot: SnapshotPayload }>('app_get_snapshot', { forceRefresh });
     seqRef.current = res.snapshot.seq;
+    if (res.snapshot.uiLang) {
+      setLang(res.snapshot.uiLang);
+    }
+    if (!initializedScopeRef.current) {
+      initializedScopeRef.current = true;
+      const hasUserSkills = res.snapshot.skills.some((s) => !s.readOnly);
+      if (!hasUserSkills) {
+        setSelectedScopeId('ALL');
+      }
+    }
     setSnapshot(res.snapshot);
     return res.snapshot;
   }, [callTool]);
 
   const loadDetail = useCallback(async (id: string) => {
+    if (isPreviewMode) {
+      setSelectedDetail(previewDetails[id] ?? null);
+      return previewDetails[id];
+    }
     const res = await callTool<{ detail: SkillDetail }>('app_get_skill_detail', { id });
     setSelectedDetail(res.detail);
     return res.detail;
-  }, [callTool]);
+  }, [callTool, isPreviewMode, previewDetails]);
 
-  // Connect to MCP Apps host once on mount
+  // Preview mode initialization or MCP Apps connection
   useEffect(() => {
+    if (isPreviewMode) {
+      const theme = urlParams.get('theme');
+      if (theme === 'dark' || theme === 'light') {
+        applyDocumentTheme(theme);
+      } else {
+        applyDocumentTheme('light');
+      }
+      const preview = buildPreviewDataset(lang);
+      setSnapshot(preview.snapshot);
+      setPreviewDetails(preview.details);
+      const firstId = preview.snapshot.skills[0]?.id ?? null;
+      setSelectedSkillId((curr) => curr || firstId);
+      if (firstId && preview.details[firstId]) {
+        setSelectedDetail(preview.details[firstId]);
+      }
+      return;
+    }
+
     mcpApp.ontoolinput = (params) => {
       const args = params.arguments as Record<string, unknown> | undefined;
       if (args?.tab === 'analytics' || args?.tab === 'graph' || args?.tab === 'finder') {
@@ -144,6 +192,9 @@ export const AppRoot: React.FC = () => {
       const ctx = mcpApp.getHostContext();
       if (ctx?.theme) applyDocumentTheme(ctx.theme);
       if (ctx?.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
+      if (ctx?.locale) {
+        setLang((curr) => curr || detectInitialLang(ctx.locale));
+      }
       const caps = mcpApp.getHostCapabilities();
       setCanUpdateContext(Boolean(caps?.updateModelContext));
       setConnected(true);
@@ -153,18 +204,16 @@ export const AppRoot: React.FC = () => {
         showToast(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [loadSnapshot, showToast]);
+  }, [isPreviewMode, lang, loadSnapshot, showToast, urlParams]);
 
-  // Window resize listener for adaptive narrow vs 3-pane wide mode
   useEffect(() => {
     const onResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Poll filesystem changes every 2s for real-time 2-way Finder sync
   useEffect(() => {
-    if (!connected) return;
+    if (!connected || isPreviewMode) return;
     const timer = window.setInterval(async () => {
       try {
         const res = await callTool<{ seq: number; changed: boolean }>('app_poll_changes', {
@@ -181,14 +230,36 @@ export const AppRoot: React.FC = () => {
       }
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [connected, callTool, loadSnapshot, loadDetail, selectedSkillId]);
+  }, [connected, isPreviewMode, callTool, loadSnapshot, loadDetail, selectedSkillId]);
 
   useEffect(() => {
     if (!selectedSkillId || !connected) return;
+    if (isPreviewMode) {
+      setSelectedDetail(previewDetails[selectedSkillId] ?? null);
+      return;
+    }
     loadDetail(selectedSkillId).catch(() => {
       setSelectedDetail(null);
     });
-  }, [selectedSkillId, connected, loadDetail]);
+  }, [selectedSkillId, connected, isPreviewMode, previewDetails, loadDetail]);
+
+  const handleToggleLanguage = async (nextLang: UiLang) => {
+    setLang(nextLang);
+    if (isPreviewMode) {
+      const preview = buildPreviewDataset(nextLang);
+      setSnapshot(preview.snapshot);
+      setPreviewDetails(preview.details);
+      if (selectedSkillId && preview.details[selectedSkillId]) {
+        setSelectedDetail(preview.details[selectedSkillId]);
+      }
+      return;
+    }
+    try {
+      await callTool('app_set_preferences', { uiLang: nextLang });
+    } catch {
+      // keep local state even if server call fails
+    }
+  };
 
   const isNarrow = windowWidth < 820;
 
@@ -234,7 +305,6 @@ export const AppRoot: React.FC = () => {
     return list;
   }, [snapshot, selectedScopeId, selectedCategory, filterKind, searchQuery, sortKey, sortAsc]);
 
-  // Auto-select first skill in wide mode if none selected
   useEffect(() => {
     if (!isNarrow && !selectedSkillId && filteredSkills.length > 0) {
       setSelectedSkillId(filteredSkills[0].id);
@@ -257,26 +327,28 @@ export const AppRoot: React.FC = () => {
 
   const handleAttachToChat = async (skills: SkillSummary[]) => {
     if (!canUpdateContext || skills.length === 0) return;
+    if (isPreviewMode) {
+      showToast(t.toastAttached(skills.length));
+      return;
+    }
     const summaryText = skills
-      .map(
-        (s) =>
-          `- Skill「${s.name}」(${s.skillMdPath})：${s.description}`,
-      )
+      .map((s) => `- Skill「${s.name}」(${s.skillMdPath}): ${s.description}`)
       .join('\n');
     await mcpApp.updateModelContext({
       content: [
         {
           type: 'text',
-          text: `使用者從「Skill 文件庫」附加了以下 Skills 供本輪協作參考：\n${summaryText}`,
+          text: `Attached Skills from Better-skills-manager:\n${summaryText}`,
         },
       ],
     });
     await callTool('app_record_panel_attach', { ids: skills.map((s) => s.id) });
     await loadSnapshot(true);
-    showToast(`已將 ${skills.length} 份 Skill 附加至對話`);
+    showToast(t.toastAttached(skills.length));
   };
 
   const handleOpenNativeFile = async (absPath: string) => {
+    if (isPreviewMode) return;
     try {
       const req = {
         method: 'com.google.antigravity/toggle-aux-pane',
@@ -314,7 +386,7 @@ export const AppRoot: React.FC = () => {
               e.preventDefault();
               setDragOverTarget(null);
               const draggedId = e.dataTransfer.getData('text/skill-id');
-              if (!draggedId) return;
+              if (!draggedId || isPreviewMode) return;
               try {
                 const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
                   'app_move_skill',
@@ -324,7 +396,7 @@ export const AppRoot: React.FC = () => {
                 setSnapshot(res.snapshot);
                 setSelectedSkillId(res.detail.id);
                 setSelectedDetail(res.detail);
-                showToast(`已移入資料夾「${node.path}」`);
+                showToast(t.toastMovedFolder(node.path));
               } catch (err) {
                 showToast(err instanceof Error ? err.message : String(err));
               }
@@ -344,8 +416,8 @@ export const AppRoot: React.FC = () => {
   if (!snapshot) {
     return (
       <div className="empty-state">
-        <strong>正在載入 Skill 文件庫…</strong>
-        <span style={{ fontSize: 12 }}>正在掃描本機 Skills、對話使用紀錄與協作關聯</span>
+        <strong>{t.loadingTitle}</strong>
+        <span style={{ fontSize: 12 }}>{t.loadingDesc}</span>
       </div>
     );
   }
@@ -354,13 +426,182 @@ export const AppRoot: React.FC = () => {
   const updateCount = snapshot.skills.filter((s) => s.sourceMeta.hasUpdate).length;
   const disabledCount = snapshot.skills.filter((s) => !s.enabled).length;
 
+  const docViewProps = selectedDetail
+    ? {
+        detail: selectedDetail,
+        scopes: snapshot.scopes,
+        folders: snapshot.folders,
+        allSkills: snapshot.skills,
+        lang,
+        canAttachContext: canUpdateContext,
+        onSaveStructured: async (fields: {
+          id: string;
+          name: string;
+          description: string;
+          version: string;
+          repository: string;
+          body: string;
+        }) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_save_skill',
+            { ...fields, mode: 'structured' },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+        },
+        onSaveRaw: async (id: string, raw: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_save_skill',
+            { id, mode: 'raw', rawContent: raw },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastSavedRaw);
+        },
+        onToggleEnabled: async (id: string, enabled: boolean) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_toggle_skill',
+            { id, enabled },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedSkillId(res.detail.id);
+          setSelectedDetail(res.detail);
+          showToast(enabled ? t.toastEnabled : t.toastDisabled);
+        },
+        onMoveCategory: async (id: string, targetCategoryPath: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_move_skill',
+            { id, targetCategoryPath },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedSkillId(res.detail.id);
+          setSelectedDetail(res.detail);
+          showToast(t.toastMovedFolder(targetCategoryPath));
+        },
+        onCopyToScope: async (id: string, targetScopeId: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_move_skill',
+            { id, targetScopeId, targetCategoryPath: '', copy: true },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedScopeId(targetScopeId);
+          setSelectedSkillId(res.detail.id);
+          setSelectedDetail(res.detail);
+          showToast(t.toastCopied(res.detail.name));
+        },
+        onDelete: async (id: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ snapshot: SnapshotPayload }>('app_delete_skill', { id });
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedSkillId(null);
+          setSelectedDetail(null);
+          setNarrowShowEditor(false);
+          showToast(t.toastDeleted);
+        },
+        onFixIssue: async (id: string, action: 'create_attachment' | 'slugify_name', missingRelPath?: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_fix_issue',
+            { id, action, missingRelPath },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastFixed);
+        },
+        onReadAttachment: async (id: string, relPath: string) => {
+          if (isPreviewMode) {
+            return { content: `# ${relPath}\n\nPreview attachment content.`, isBinary: false, size: 42 };
+          }
+          const res = await callTool<{ file: { content: string; isBinary: boolean; size: number } }>(
+            'app_read_attachment',
+            { id, relPath },
+          );
+          return res.file;
+        },
+        onSaveAttachment: async (id: string, relPath: string, content: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_save_attachment',
+            { id, relPath, content },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastSavedAttach(relPath));
+        },
+        onDeleteAttachment: async (id: string, relPath: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_delete_attachment',
+            { id, relPath },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastDeletedAttach(relPath));
+        },
+        onBindSource: async (id: string, sourceType: 'git' | 'local_dir' | 'local_original', location?: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_bind_source',
+            { id, sourceType, location },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastBoundSource);
+        },
+        onCheckUpdate: async (id: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ updatesAvailable: number; snapshot: SnapshotPayload }>(
+            'app_check_updates',
+            { id },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          await loadDetail(id);
+          showToast(res.updatesAvailable > 0 ? t.toastFoundUpdate : t.toastUpToDate);
+        },
+        onApplyUpdate: async (id: string) => {
+          if (isPreviewMode) return;
+          const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
+            'app_apply_update',
+            { id },
+          );
+          seqRef.current = res.snapshot.seq;
+          setSnapshot(res.snapshot);
+          setSelectedDetail(res.detail);
+          showToast(t.toastUpdated);
+        },
+        onRevealInFinder: async (path: string) => {
+          if (isPreviewMode) return;
+          await callTool('app_reveal_in_finder', { path });
+        },
+        onOpenNativeFile: handleOpenNativeFile,
+        onAttachToChat: handleAttachToChat,
+        onSelectSkill: handleSelectSkill,
+      }
+    : null;
+
   return (
     <div className="app-shell">
       {/* Top Bar */}
       <div className="topbar">
         <div className="topbar-brand">
           <span>📚</span>
-          <span>Skill 文件庫</span>
+          <span>{t.brand}</span>
         </div>
 
         <div className="tab-group">
@@ -368,36 +609,54 @@ export const AppRoot: React.FC = () => {
             className={`tab-btn ${mainTab === 'finder' ? 'active' : ''}`}
             onClick={() => setMainTab('finder')}
           >
-            🗂️ 文件管理
+            {t.tabFinder}
           </button>
           <button
             className={`tab-btn ${mainTab === 'analytics' ? 'active' : ''}`}
             onClick={() => setMainTab('analytics')}
           >
-            📊 使用時間軸
+            {t.tabAnalytics}
           </button>
           <button
             className={`tab-btn ${mainTab === 'graph' ? 'active' : ''}`}
             onClick={() => setMainTab('graph')}
           >
-            🕸️ 協作關聯 ({snapshot.graphEdges.length})
+            {t.tabGraph} ({snapshot.graphEdges.length})
           </button>
         </div>
 
         {mainTab === 'finder' && (
           <input
             className="search-box"
-            placeholder="搜尋名稱、描述或分類…"
+            placeholder={t.searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         )}
 
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center' }}>
+          <div className="tab-group" title="Switch UI Language / 切換介面語言">
+            <button
+              className={`tab-btn ${lang === 'en' ? 'active' : ''}`}
+              style={{ padding: '3px 7px', fontSize: 11 }}
+              onClick={() => void handleToggleLanguage('en')}
+            >
+              EN
+            </button>
+            <button
+              className={`tab-btn ${lang === 'zh-TW' ? 'active' : ''}`}
+              style={{ padding: '3px 7px', fontSize: 11 }}
+              onClick={() => void handleToggleLanguage('zh-TW')}
+            >
+              繁中
+            </button>
+          </div>
+
           <button
             className="btn btn-sm"
             disabled={checkingAll}
             onClick={async () => {
+              if (isPreviewMode) return;
               setCheckingAll(true);
               try {
                 const res = await callTool<{ checkedCount: number; updatesAvailable: number; snapshot: SnapshotPayload }>(
@@ -407,7 +666,7 @@ export const AppRoot: React.FC = () => {
                 seqRef.current = res.snapshot.seq;
                 setSnapshot(res.snapshot);
                 if (selectedSkillId) loadDetail(selectedSkillId).catch(() => undefined);
-                showToast(`檢查完畢：${res.checkedCount} 份中共有 ${res.updatesAvailable} 份可用更新`);
+                showToast(t.toastCheckedAll(res.checkedCount, res.updatesAvailable));
               } catch (err) {
                 showToast(err instanceof Error ? err.message : String(err));
               } finally {
@@ -415,7 +674,7 @@ export const AppRoot: React.FC = () => {
               }
             }}
           >
-            {checkingAll ? '檢查中…' : '🔄 檢查更新'}
+            {checkingAll ? t.checkingUpdates : t.checkUpdates}
           </button>
 
           <button
@@ -433,7 +692,7 @@ export const AppRoot: React.FC = () => {
               setShowCreateModal(true);
             }}
           >
-            + 新增文件
+            {t.newSkillBtn}
           </button>
         </div>
       </div>
@@ -442,19 +701,19 @@ export const AppRoot: React.FC = () => {
       {mainTab === 'finder' && (
         <div className="filter-strip">
           <button className={`pill ${filterKind === 'all' ? 'active' : ''}`} onClick={() => setFilterKind('all')}>
-            全部 ({snapshot.skills.length})
+            {t.filterAll} ({snapshot.skills.length})
           </button>
           <button className={`pill ${filterKind === 'enabled' ? 'active' : ''}`} onClick={() => setFilterKind('enabled')}>
-            啟用中
+            {t.filterEnabled}
           </button>
           <button className={`pill ${filterKind === 'disabled' ? 'active' : ''}`} onClick={() => setFilterKind('disabled')}>
-            已停用封存 ({disabledCount})
+            {t.filterDisabled} ({disabledCount})
           </button>
           <button className={`pill ${filterKind === 'issues' ? 'active' : ''}`} onClick={() => setFilterKind('issues')}>
-            ⚠️ 需修正 ({issueCount})
+            {t.filterIssues} ({issueCount})
           </button>
           <button className={`pill ${filterKind === 'updates' ? 'active' : ''}`} onClick={() => setFilterKind('updates')}>
-            ⬆️ 有更新 ({updateCount})
+            {t.filterUpdates} ({updateCount})
           </button>
         </div>
       )}
@@ -462,12 +721,13 @@ export const AppRoot: React.FC = () => {
       {/* Main Content */}
       <div className="main-area">
         {mainTab === 'analytics' && (
-          <AnalyticsView snapshot={snapshot} onSelectSkill={handleSelectSkill} />
+          <AnalyticsView snapshot={snapshot} lang={lang} onSelectSkill={handleSelectSkill} />
         )}
 
         {mainTab === 'graph' && (
           <GraphView
             snapshot={snapshot}
+            lang={lang}
             onSelectSkill={handleSelectSkill}
             canAttachContext={canUpdateContext}
             onAttachSkills={(skills) => void handleAttachToChat(skills)}
@@ -479,11 +739,11 @@ export const AppRoot: React.FC = () => {
             {/* Left Sidebar: Scopes & Category Folders */}
             <div className="pane-col">
               <div className="pane-header">
-                <span>位置與分類資料夾</span>
+                <span>{t.foldersHeader}</span>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button
                     className="btn btn-sm"
-                    title="建立新分類資料夾"
+                    title={t.newFolderTitle}
                     onClick={() => {
                       const targetScope =
                         selectedScopeId !== 'ALL' && selectedScopeId !== 'ALL_USER' && selectedScopeId !== 'builtin'
@@ -498,10 +758,10 @@ export const AppRoot: React.FC = () => {
                   </button>
                   <button
                     className="btn btn-sm"
-                    title="掛載專案或外部通用目錄"
+                    title={t.mountTitle}
                     onClick={() => setShowScopeModal(true)}
                   >
-                    +掛載
+                    {t.mountBtn}
                   </button>
                 </div>
               </div>
@@ -514,7 +774,7 @@ export const AppRoot: React.FC = () => {
                     setFilterKind('all');
                   }}
                 >
-                  <span>🌟 我的全部 Skills</span>
+                  <span>{t.allMySkills}</span>
                   <span className="count-chip">
                     {snapshot.skills.filter((s) => !s.readOnly).length}
                   </span>
@@ -527,13 +787,14 @@ export const AppRoot: React.FC = () => {
                     setFilterKind('all');
                   }}
                 >
-                  <span>📚 含內建總覽</span>
+                  <span>{t.allWithBuiltin}</span>
                   <span className="count-chip">{snapshot.skills.length}</span>
                 </div>
 
                 {snapshot.scopes.map((sc) => {
                   const scopeFolders = snapshot.folders.filter((f) => f.scopeId === sc.id);
                   const rootDropKey = `${sc.id}::`;
+                  const label = formatScopeLabel(sc, lang);
                   return (
                     <div key={sc.id} style={{ marginTop: 8 }}>
                       <div
@@ -550,7 +811,7 @@ export const AppRoot: React.FC = () => {
                         }}
                         onDragLeave={() => setDragOverTarget(null)}
                         onDrop={async (e) => {
-                          if (sc.readOnly) return;
+                          if (sc.readOnly || isPreviewMode) return;
                           e.preventDefault();
                           setDragOverTarget(null);
                           const draggedId = e.dataTransfer.getData('text/skill-id');
@@ -564,14 +825,14 @@ export const AppRoot: React.FC = () => {
                             setSnapshot(res.snapshot);
                             setSelectedSkillId(res.detail.id);
                             setSelectedDetail(res.detail);
-                            showToast(`已移至「${sc.label}」根目錄`);
+                            showToast(t.toastMovedFolder(''));
                           } catch (err) {
                             showToast(err instanceof Error ? err.message : String(err));
                           }
                         }}
                       >
                         <span style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {sc.kind === 'builtin' ? '🔒' : sc.kind === 'global' ? '🏠' : '💼'} {sc.label}
+                          {sc.kind === 'builtin' ? '🔒' : sc.kind === 'global' ? '🏠' : '💼'} {label}
                         </span>
                         <span className="count-chip">{sc.skillCount}</span>
                       </div>
@@ -586,23 +847,23 @@ export const AppRoot: React.FC = () => {
             <div className="pane-col">
               <div className="skill-table-header">
                 <span className="sort-col" onClick={() => handleSort('name')}>
-                  Skill 文件 {sortKey === 'name' ? (sortAsc ? '↑' : '↓') : ''}
+                  {t.colSkillDoc} {sortKey === 'name' ? (sortAsc ? '↑' : '↓') : ''}
                 </span>
                 <span className="sort-col" onClick={() => handleSort('publishedAt')}>
-                  發布/安裝 {sortKey === 'publishedAt' ? (sortAsc ? '↑' : '↓') : ''}
+                  {t.colDates} {sortKey === 'publishedAt' ? (sortAsc ? '↑' : '↓') : ''}
                 </span>
                 <span className="sort-col" onClick={() => handleSort('totalUses')}>
-                  總次數 {sortKey === 'totalUses' ? (sortAsc ? '↑' : '↓') : ''}
+                  {t.colTotal} {sortKey === 'totalUses' ? (sortAsc ? '↑' : '↓') : ''}
                 </span>
                 <span className="sort-col" onClick={() => handleSort('last30dUses')}>
-                  30天 {sortKey === 'last30dUses' ? (sortAsc ? '↑' : '↓') : ''}
+                  {t.col30d} {sortKey === 'last30dUses' ? (sortAsc ? '↑' : '↓') : ''}
                 </span>
-                <span>更新 / 狀態</span>
+                <span>{t.colStatus}</span>
               </div>
               <div className="scroll-y">
                 {filteredSkills.length === 0 ? (
                   <div className="empty-state">
-                    <span>此篩選條件下沒有 Skill 文件</span>
+                    <span>{t.noMatchingSkills}</span>
                   </div>
                 ) : (
                   filteredSkills.map((s) => (
@@ -624,13 +885,13 @@ export const AppRoot: React.FC = () => {
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {s.categoryPath ? `📁 ${s.categoryPath} · ` : ''}
-                          {s.description || '(無描述)'}
+                          {s.description || t.noDesc}
                         </div>
                       </div>
 
                       <div style={{ fontSize: 11, color: 'var(--text-2)' }}>
-                        <div>發 {formatDateShort(s.publishedAt)}</div>
-                        <div>裝 {formatDateShort(s.installedAt)}</div>
+                        <div>{t.pubShort} {formatDateShort(s.publishedAt)}</div>
+                        <div>{t.instShort} {formatDateShort(s.installedAt)}</div>
                       </div>
 
                       <div style={{ fontWeight: 600 }}>{s.totalUses}</div>
@@ -640,13 +901,13 @@ export const AppRoot: React.FC = () => {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {s.sourceMeta.hasUpdate ? (
-                          <span className="badge badge-warn">有更新</span>
+                          <span className="badge badge-warn">{t.badgeUpdate}</span>
                         ) : s.sourceMeta.checkStatus === 'up_to_date' ? (
-                          <span className="badge badge-ok">最新</span>
+                          <span className="badge badge-ok">{t.badgeLatest}</span>
                         ) : !s.enabled ? (
-                          <span className="badge">停用</span>
+                          <span className="badge">{t.badgeDisabled}</span>
                         ) : (
-                          <span className="badge">{s.relationCount > 0 ? `🔗${s.relationCount}` : '正常'}</span>
+                          <span className="badge">{s.relationCount > 0 ? `🔗${s.relationCount}` : t.badgeOk}</span>
                         )}
                       </div>
                     </div>
@@ -657,152 +918,11 @@ export const AppRoot: React.FC = () => {
 
             {/* Right Column: Single-Document Editor */}
             <div className="pane-col">
-              {selectedDetail ? (
-                <DocumentView
-                  detail={selectedDetail}
-                  scopes={snapshot.scopes}
-                  folders={snapshot.folders}
-                  allSkills={snapshot.skills}
-                  isNarrow={false}
-                  canAttachContext={canUpdateContext}
-                  onSaveStructured={async (fields) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_save_skill',
-                      { ...fields, mode: 'structured' },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                  }}
-                  onSaveRaw={async (id, raw) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_save_skill',
-                      { id, mode: 'raw', rawContent: raw },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast('已儲存原始 SKILL.md');
-                  }}
-                  onToggleEnabled={async (id, enabled) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_toggle_skill',
-                      { id, enabled },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedSkillId(res.detail.id);
-                    setSelectedDetail(res.detail);
-                    showToast(enabled ? '已重新啟用並歸位原分類' : '已移入 _disabled 封存夾');
-                  }}
-                  onMoveCategory={async (id, targetCategoryPath) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_move_skill',
-                      { id, targetCategoryPath },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedSkillId(res.detail.id);
-                    setSelectedDetail(res.detail);
-                    showToast(`已分類至 ${targetCategoryPath || '根目錄'}`);
-                  }}
-                  onCopyToScope={async (id, targetScopeId) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_move_skill',
-                      { id, targetScopeId, targetCategoryPath: '', copy: true },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedScopeId(targetScopeId);
-                    setSelectedSkillId(res.detail.id);
-                    setSelectedDetail(res.detail);
-                    showToast(`已複製掛載：${res.detail.name}`);
-                  }}
-                  onDelete={async (id) => {
-                    const res = await callTool<{ snapshot: SnapshotPayload }>('app_delete_skill', { id });
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedSkillId(null);
-                    setSelectedDetail(null);
-                    showToast('已刪除 Skill 文件');
-                  }}
-                  onFixIssue={async (id, action, missingRelPath) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_fix_issue',
-                      { id, action, missingRelPath },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast('已完成格式修復');
-                  }}
-                  onReadAttachment={async (id, relPath) => {
-                    const res = await callTool<{ file: { content: string; isBinary: boolean; size: number } }>(
-                      'app_read_attachment',
-                      { id, relPath },
-                    );
-                    return res.file;
-                  }}
-                  onSaveAttachment={async (id, relPath, content) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_save_attachment',
-                      { id, relPath, content },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast(`已儲存附件 ${relPath}`);
-                  }}
-                  onDeleteAttachment={async (id, relPath) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_delete_attachment',
-                      { id, relPath },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast(`已刪除附件 ${relPath}`);
-                  }}
-                  onBindSource={async (id, sourceType, location) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_bind_source',
-                      { id, sourceType, location },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast('已更新來源設定');
-                  }}
-                  onCheckUpdate={async (id) => {
-                    const res = await callTool<{ updatesAvailable: number; snapshot: SnapshotPayload }>(
-                      'app_check_updates',
-                      { id },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    await loadDetail(id);
-                    showToast(res.updatesAvailable > 0 ? '發現可用更新！' : '已是最新版本');
-                  }}
-                  onApplyUpdate={async (id) => {
-                    const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                      'app_apply_update',
-                      { id },
-                    );
-                    seqRef.current = res.snapshot.seq;
-                    setSnapshot(res.snapshot);
-                    setSelectedDetail(res.detail);
-                    showToast('已備份舊版並完成更新！');
-                  }}
-                  onRevealInFinder={async (path) => {
-                    await callTool('app_reveal_in_finder', { path });
-                  }}
-                  onOpenNativeFile={handleOpenNativeFile}
-                  onAttachToChat={handleAttachToChat}
-                  onSelectSkill={handleSelectSkill}
-                />
+              {docViewProps ? (
+                <DocumentView {...docViewProps} isNarrow={false} />
               ) : (
                 <div className="empty-state">
-                  <span>點擊左側任一 Skill 文件即可像一般文件般讀寫與管理</span>
+                  <span>{t.emptySelectDoc}</span>
                 </div>
               )}
             </div>
@@ -812,145 +932,11 @@ export const AppRoot: React.FC = () => {
         {/* Narrow Side-Pane Master/Detail Mode */}
         {mainTab === 'finder' && isNarrow && (
           <div className="finder-narrow">
-            {narrowShowEditor && selectedDetail ? (
+            {narrowShowEditor && docViewProps ? (
               <DocumentView
-                detail={selectedDetail}
-                scopes={snapshot.scopes}
-                folders={snapshot.folders}
-                allSkills={snapshot.skills}
+                {...docViewProps}
                 isNarrow={true}
-                canAttachContext={canUpdateContext}
                 onBack={() => setNarrowShowEditor(false)}
-                onSaveStructured={async (fields) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_save_skill',
-                    { ...fields, mode: 'structured' },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                }}
-                onSaveRaw={async (id, raw) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_save_skill',
-                    { id, mode: 'raw', rawContent: raw },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                  showToast('已儲存原始 SKILL.md');
-                }}
-                onToggleEnabled={async (id, enabled) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_toggle_skill',
-                    { id, enabled },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedSkillId(res.detail.id);
-                  setSelectedDetail(res.detail);
-                  showToast(enabled ? '已重新啟用' : '已停用封存');
-                }}
-                onMoveCategory={async (id, targetCategoryPath) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_move_skill',
-                    { id, targetCategoryPath },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedSkillId(res.detail.id);
-                  setSelectedDetail(res.detail);
-                }}
-                onCopyToScope={async (id, targetScopeId) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_move_skill',
-                    { id, targetScopeId, targetCategoryPath: '', copy: true },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedSkillId(res.detail.id);
-                  setSelectedDetail(res.detail);
-                  showToast(`已複製掛載：${res.detail.name}`);
-                }}
-                onDelete={async (id) => {
-                  const res = await callTool<{ snapshot: SnapshotPayload }>('app_delete_skill', { id });
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedSkillId(null);
-                  setSelectedDetail(null);
-                  setNarrowShowEditor(false);
-                }}
-                onFixIssue={async (id, action, missingRelPath) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_fix_issue',
-                    { id, action, missingRelPath },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                  showToast('已完成格式修復');
-                }}
-                onReadAttachment={async (id, relPath) => {
-                  const res = await callTool<{ file: { content: string; isBinary: boolean; size: number } }>(
-                    'app_read_attachment',
-                    { id, relPath },
-                  );
-                  return res.file;
-                }}
-                onSaveAttachment={async (id, relPath, content) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_save_attachment',
-                    { id, relPath, content },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                  showToast(`已儲存附件 ${relPath}`);
-                }}
-                onDeleteAttachment={async (id, relPath) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_delete_attachment',
-                    { id, relPath },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                }}
-                onBindSource={async (id, sourceType, location) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_bind_source',
-                    { id, sourceType, location },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                }}
-                onCheckUpdate={async (id) => {
-                  const res = await callTool<{ updatesAvailable: number; snapshot: SnapshotPayload }>(
-                    'app_check_updates',
-                    { id },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  await loadDetail(id);
-                  showToast(res.updatesAvailable > 0 ? '發現可用更新！' : '已是最新版本');
-                }}
-                onApplyUpdate={async (id) => {
-                  const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
-                    'app_apply_update',
-                    { id },
-                  );
-                  seqRef.current = res.snapshot.seq;
-                  setSnapshot(res.snapshot);
-                  setSelectedDetail(res.detail);
-                  showToast('已更新完成！');
-                }}
-                onRevealInFinder={async (path) => {
-                  await callTool('app_reveal_in_finder', { path });
-                }}
-                onOpenNativeFile={handleOpenNativeFile}
-                onAttachToChat={handleAttachToChat}
-                onSelectSkill={handleSelectSkill}
               />
             ) : (
               <>
@@ -963,11 +949,11 @@ export const AppRoot: React.FC = () => {
                     }}
                     style={{ flex: 1, minWidth: 140 }}
                   >
-                    <option value="ALL_USER">🌟 我的全部 Skills</option>
-                    <option value="ALL">📚 含內建總覽</option>
+                    <option value="ALL_USER">{t.allMySkills}</option>
+                    <option value="ALL">{t.allWithBuiltin}</option>
                     {snapshot.scopes.map((sc) => (
                       <option key={sc.id} value={sc.id}>
-                        {sc.label} ({sc.skillCount})
+                        {formatScopeLabel(sc, lang)} ({sc.skillCount})
                       </option>
                     ))}
                   </select>
@@ -976,11 +962,11 @@ export const AppRoot: React.FC = () => {
                     value={sortKey}
                     onChange={(e) => setSortKey(e.target.value as SortKey)}
                   >
-                    <option value="totalUses">依總使用排序</option>
-                    <option value="last30dUses">依近30天排序</option>
-                    <option value="publishedAt">依發布日期</option>
-                    <option value="installedAt">依安裝日期</option>
-                    <option value="name">依名稱 A-Z</option>
+                    <option value="totalUses">{t.sortByTotal}</option>
+                    <option value="last30dUses">{t.sortBy30d}</option>
+                    <option value="publishedAt">{t.sortByPub}</option>
+                    <option value="installedAt">{t.sortByInst}</option>
+                    <option value="name">{t.sortByName}</option>
                   </select>
 
                   <button
@@ -998,39 +984,43 @@ export const AppRoot: React.FC = () => {
                     +📁
                   </button>
                   <button className="btn btn-sm" onClick={() => setShowScopeModal(true)}>
-                    +掛載
+                    {t.mountBtn}
                   </button>
                 </div>
 
                 <div className="scroll-y">
                   {filteredSkills.length === 0 ? (
                     <div className="empty-state">
-                      <span>沒有符合條件的 Skill 文件</span>
+                      <span>{t.noMatchingSkills}</span>
                     </div>
                   ) : (
-                    filteredSkills.map((s) => (
-                      <div
-                        key={s.id}
-                        className={`skill-card ${selectedSkillId === s.id ? 'selected' : ''}`}
-                        onClick={() => handleSelectSkill(s.id)}
-                      >
-                        <div className="skill-title-line">
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {s.validationStatus === 'error' ? '❌' : s.validationStatus === 'warning' ? '⚠️' : '📄'} {s.name}
-                          </span>
-                          <span className="badge">{s.scopeLabel}</span>
+                    filteredSkills.map((s) => {
+                      const scObj = snapshot.scopes.find((sc) => sc.id === s.scopeId);
+                      const scDisplay = scObj ? formatScopeLabel(scObj, lang) : s.scopeLabel;
+                      return (
+                        <div
+                          key={s.id}
+                          className={`skill-card ${selectedSkillId === s.id ? 'selected' : ''}`}
+                          onClick={() => handleSelectSkill(s.id)}
+                        >
+                          <div className="skill-title-line">
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {s.validationStatus === 'error' ? '❌' : s.validationStatus === 'warning' ? '⚠️' : '📄'} {s.name}
+                            </span>
+                            <span className="badge">{scDisplay}</span>
+                          </div>
+                          <div className="skill-desc-clamp">{s.description || t.noDesc}</div>
+                          <div className="meta-badges">
+                            {s.categoryPath && <span className="badge">📁 {s.categoryPath}</span>}
+                            <span className="badge">📅 {t.pubShort} {formatDateShort(s.publishedAt)} / {t.instShort} {formatDateShort(s.installedAt)}</span>
+                            <span className="badge">{t.sortTotalShort} {s.totalUses} / {t.sort30dShort} {s.last30dUses}</span>
+                            {s.sourceMeta.hasUpdate && <span className="badge badge-warn">{t.updateAvailable}</span>}
+                            {!s.enabled && <span className="badge">{t.badgeDisabled}</span>}
+                            {s.relationCount > 0 && <span className="badge badge-info">🔗 {s.relationCount}</span>}
+                          </div>
                         </div>
-                        <div className="skill-desc-clamp">{s.description || '(尚未填寫觸發描述)'}</div>
-                        <div className="meta-badges">
-                          {s.categoryPath && <span className="badge">📁 {s.categoryPath}</span>}
-                          <span className="badge">📅 發 {formatDateShort(s.publishedAt)} / 裝 {formatDateShort(s.installedAt)}</span>
-                          <span className="badge">總 {s.totalUses} / 30天 {s.last30dUses}</span>
-                          {s.sourceMeta.hasUpdate && <span className="badge badge-warn">⬆️ 有更新</span>}
-                          {!s.enabled && <span className="badge">已停用</span>}
-                          {s.relationCount > 0 && <span className="badge badge-info">🔗 {s.relationCount}</span>}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </>
@@ -1043,9 +1033,9 @@ export const AppRoot: React.FC = () => {
       {showCreateModal && (
         <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>+ 新增 Skill 文件</strong>
+            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>{t.modalNewSkillTitle}</strong>
             <div className="field-group">
-              <div className="field-label">儲存位置</div>
+              <div className="field-label">{t.modalLocation}</div>
               <select
                 className="input-text"
                 value={newSkillScope}
@@ -1055,41 +1045,41 @@ export const AppRoot: React.FC = () => {
                   .filter((s) => !s.readOnly)
                   .map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {formatScopeLabel(s, lang)}
                     </option>
                   ))}
               </select>
             </div>
             <div className="field-group">
-              <div className="field-label">分類資料夾 (選填，例如：開發/前端)</div>
+              <div className="field-label">{t.modalFolder}</div>
               <input
                 className="input-text"
-                placeholder="留空代表放在根目錄"
+                placeholder={t.modalFolderPlaceholder}
                 value={newSkillCat}
                 onChange={(e) => setNewSkillCat(e.target.value)}
               />
             </div>
             <div className="field-group">
-              <div className="field-label">Skill 名稱</div>
+              <div className="field-label">{t.modalSkillName}</div>
               <input
                 className="input-text"
-                placeholder="例如：deploy-helper"
+                placeholder={t.modalSkillNamePlaceholder}
                 value={newSkillName}
                 onChange={(e) => setNewSkillName(e.target.value)}
               />
             </div>
             <div className="field-group">
-              <div className="field-label">觸發描述 (告訴 Agent 何時使用)</div>
+              <div className="field-label">{t.modalSkillDesc}</div>
               <textarea
                 className="textarea-text"
                 rows={3}
-                placeholder="例如：當使用者要求部署服務或檢查發布設定時啟用此 Skill。"
+                placeholder={t.modalSkillDescPlaceholder}
                 value={newSkillDesc}
                 onChange={(e) => setNewSkillDesc(e.target.value)}
               />
             </div>
             <div className="field-group">
-              <div className="field-label">初始範本</div>
+              <div className="field-label">{t.modalTemplate}</div>
               <select
                 className="input-text"
                 value={newSkillTemplate}
@@ -1097,18 +1087,22 @@ export const AppRoot: React.FC = () => {
                   setNewSkillTemplate(e.target.value as 'blank' | 'script-workflow' | 'reference-guide')
                 }
               >
-                <option value="blank">空白文件（僅 SKILL.md）</option>
-                <option value="script-workflow">附帶執行腳本（含 scripts/run.sh）</option>
-                <option value="reference-guide">附帶參考手冊（含 references/guide.md）</option>
+                <option value="blank">{t.tplBlank}</option>
+                <option value="script-workflow">{t.tplScript}</option>
+                <option value="reference-guide">{t.tplRef}</option>
               </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button className="btn" onClick={() => setShowCreateModal(false)}>
-                取消
+                {t.cancelBtn}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={async () => {
+                  if (isPreviewMode) {
+                    setShowCreateModal(false);
+                    return;
+                  }
                   try {
                     const res = await callTool<{ detail: SkillDetail; snapshot: SnapshotPayload }>(
                       'app_create_skill',
@@ -1127,13 +1121,13 @@ export const AppRoot: React.FC = () => {
                     setSelectedDetail(res.detail);
                     if (isNarrow) setNarrowShowEditor(true);
                     setShowCreateModal(false);
-                    showToast(`已建立「${res.detail.name}」`);
+                    showToast(t.toastCreatedSkill(res.detail.name));
                   } catch (err) {
                     showToast(err instanceof Error ? err.message : String(err));
                   }
                 }}
               >
-                建立並開啟編輯
+                {t.createAndOpenBtn}
               </button>
             </div>
           </div>
@@ -1144,9 +1138,9 @@ export const AppRoot: React.FC = () => {
       {showFolderModal && (
         <div className="modal-backdrop" onClick={() => setShowFolderModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>📁 新增分類資料夾</strong>
+            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>{t.modalNewFolderTitle}</strong>
             <div className="field-group">
-              <div className="field-label">所屬範圍</div>
+              <div className="field-label">{t.modalScopeBelong}</div>
               <select
                 className="input-text"
                 value={folderScopeId}
@@ -1156,27 +1150,31 @@ export const AppRoot: React.FC = () => {
                   .filter((s) => !s.readOnly)
                   .map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.label}
+                      {formatScopeLabel(s, lang)}
                     </option>
                   ))}
               </select>
             </div>
             <div className="field-group">
-              <div className="field-label">資料夾路徑（支援多層，例如：前端/React）</div>
+              <div className="field-label">{t.modalFolderPathLabel}</div>
               <input
                 className="input-text"
-                placeholder="例如：自動化工具"
+                placeholder={t.modalFolderPathPlaceholder}
                 value={folderPathInput}
                 onChange={(e) => setFolderPathInput(e.target.value)}
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button className="btn" onClick={() => setShowFolderModal(false)}>
-                取消
+                {t.cancelBtn}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={async () => {
+                  if (isPreviewMode) {
+                    setShowFolderModal(false);
+                    return;
+                  }
                   try {
                     const res = await callTool<{ snapshot: SnapshotPayload }>('app_manage_folder', {
                       scopeId: folderScopeId,
@@ -1186,13 +1184,13 @@ export const AppRoot: React.FC = () => {
                     seqRef.current = res.snapshot.seq;
                     setSnapshot(res.snapshot);
                     setShowFolderModal(false);
-                    showToast(`已建立分類資料夾「${folderPathInput}」`);
+                    showToast(t.toastCreatedFolder(folderPathInput));
                   } catch (err) {
                     showToast(err instanceof Error ? err.message : String(err));
                   }
                 }}
               >
-                建立資料夾
+                {t.createFolderBtn}
               </button>
             </div>
           </div>
@@ -1203,20 +1201,20 @@ export const AppRoot: React.FC = () => {
       {showScopeModal && (
         <div className="modal-backdrop" onClick={() => setShowScopeModal(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>💼 掛載專案或外部 Skill 目錄</strong>
+            <strong style={{ fontSize: 15, display: 'block', marginBottom: 10 }}>{t.modalMountTitle}</strong>
             <div className="field-group">
-              <div className="field-label">目錄類型</div>
+              <div className="field-label">{t.modalMountType}</div>
               <select
                 className="input-text"
                 value={scopeAction}
                 onChange={(e) => setScopeAction(e.target.value as 'add_workspace' | 'add_external')}
               >
-                <option value="add_workspace">專案 Workspace 根目錄（自動管理 .agents/skills）</option>
-                <option value="add_external">外部通用 Skills 目錄（例如 ~/.claude/skills）</option>
+                <option value="add_workspace">{t.mountTypeWs}</option>
+                <option value="add_external">{t.mountTypeExt}</option>
               </select>
             </div>
             <div className="field-group">
-              <div className="field-label">目錄完整路徑</div>
+              <div className="field-label">{t.modalMountPath}</div>
               <input
                 className="input-text"
                 placeholder="/Users/yourname/projects/my-app"
@@ -1225,21 +1223,25 @@ export const AppRoot: React.FC = () => {
               />
             </div>
             <div className="field-group">
-              <div className="field-label">顯示名稱 (選填)</div>
+              <div className="field-label">{t.modalMountLabel}</div>
               <input
                 className="input-text"
-                placeholder="例如：我的網站專案"
+                placeholder={t.modalMountLabelPlaceholder}
                 value={scopeLabelInput}
                 onChange={(e) => setScopeLabelInput(e.target.value)}
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button className="btn" onClick={() => setShowScopeModal(false)}>
-                取消
+                {t.cancelBtn}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={async () => {
+                  if (isPreviewMode) {
+                    setShowScopeModal(false);
+                    return;
+                  }
                   try {
                     const res = await callTool<{ snapshot: SnapshotPayload }>('app_manage_scopes', {
                       action: scopeAction,
@@ -1251,13 +1253,13 @@ export const AppRoot: React.FC = () => {
                     setShowScopeModal(false);
                     setScopePathInput('');
                     setScopeLabelInput('');
-                    showToast('已掛載目錄');
+                    showToast(t.toastMounted);
                   } catch (err) {
                     showToast(err instanceof Error ? err.message : String(err));
                   }
                 }}
               >
-                掛載目錄
+                {t.mountConfirmBtn}
               </button>
             </div>
           </div>
