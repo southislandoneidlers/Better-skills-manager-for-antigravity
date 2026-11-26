@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { CategoryNode, ScopeInfo, SkillDetail, SkillSummary } from '../../shared/types.ts';
 import {
+  detectFileManagerLabel,
   formatRelationReason,
   formatScopeLabel,
   formatSourceMessage,
@@ -282,7 +283,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               onClick={() => void onRevealInFinder(detail.skillDir)}
               title={t.revealFinderTip}
             >
-              {t.revealFinder}
+              {detectFileManagerLabel(lang)}
             </button>
 
             {!detail.readOnly && (
@@ -700,7 +701,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                             className="btn btn-sm"
                             onClick={() => void onRevealInFinder(`${detail.skillDir}/${selectedAttach}`)}
                           >
-                            {t.revealFinder}
+                            {detectFileManagerLabel(lang)}
                           </button>
                           {!detail.readOnly && (
                             <button

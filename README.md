@@ -96,7 +96,7 @@ flowchart LR
 
 ## Installation
 
-### Install from Source
+### macOS & Linux
 
 ```bash
 git clone https://github.com/southislandoneidlers/better-skills-manager.git
@@ -104,10 +104,17 @@ cd better-skills-manager
 ./scripts/install.sh
 ```
 
-> Cross-platform / Windows:
-> ```bash
-> npm install && npm run build && node ./dist/cli.mjs install
-> ```
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/southislandoneidlers/better-skills-manager.git
+cd better-skills-manager
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+This installs the plugin into `%USERPROFILE%\.gemini\config\plugins\skill-docs` and configures `mcp_config.json` using your installed `node.exe` path directly (supports `nodejs.org`, `nvm-windows`, `fnm`, and `volta`).
+
+> Works across **macOS**, **Windows**, and **Linux** (requires Node.js >= 20). Notice that file-manager actions adapt automatically (`Finder` on macOS, `Explorer` on Windows, `Files` on Linux).
 
 ### Or via `npx` (once published to npm)
 
@@ -115,7 +122,7 @@ cd better-skills-manager
 npx -y better-skills-manager install
 ```
 
-This installs the plugin to `~/.gemini/config/plugins/skill-docs` (or a custom directory via `--target <dir>`).
+This installs the plugin to `~/.gemini/config/plugins/skill-docs` on macOS/Linux or `%USERPROFILE%\.gemini\config\plugins\skill-docs` on Windows (or a custom directory via `--target <dir>`).
 
 ### Opening in Antigravity
 

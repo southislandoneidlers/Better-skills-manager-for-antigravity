@@ -15,14 +15,14 @@ import type {
 import { AnalyticsView } from './components/AnalyticsView.tsx';
 import { DocumentView } from './components/DocumentView.tsx';
 import { GraphView } from './components/GraphView.tsx';
-import { detectInitialLang, formatScopeLabel, STRINGS } from './i18n.ts';
+import { detectInitialLang, detectMountPathPlaceholder, formatScopeLabel, STRINGS, toFileUri } from './i18n.ts';
 import { buildPreviewDataset } from './previewData.ts';
 
 type MainTab = 'finder' | 'analytics' | 'graph';
 type FilterKind = 'all' | 'enabled' | 'disabled' | 'issues' | 'updates';
 type SortKey = 'name' | 'publishedAt' | 'installedAt' | 'totalUses' | 'last30dUses';
 
-const mcpApp = new App({ name: 'Better-skills-manager', version: '1.1.0' }, {});
+const mcpApp = new App({ name: 'Better-skills-manager', version: '1.1.1' }, {});
 
 function parseToolResultJson<T>(result: { structuredContent?: unknown; content?: Array<{ type: string; text?: string }> }): T | null {
   if (result.structuredContent && typeof result.structuredContent === 'object') {
@@ -352,7 +352,7 @@ export const AppRoot: React.FC = () => {
     try {
       const req = {
         method: 'com.google.antigravity/toggle-aux-pane',
-        params: { tabType: 'fileView', uri: `file://${absPath}` },
+        params: { tabType: 'fileView', uri: toFileUri(absPath) },
       } as unknown as Parameters<typeof mcpApp.request>[0];
       await mcpApp.request(
         req,
@@ -1217,7 +1217,7 @@ export const AppRoot: React.FC = () => {
               <div className="field-label">{t.modalMountPath}</div>
               <input
                 className="input-text"
-                placeholder="/Users/yourname/projects/my-app"
+                placeholder={detectMountPathPlaceholder()}
                 value={scopePathInput}
                 onChange={(e) => setScopePathInput(e.target.value)}
               />

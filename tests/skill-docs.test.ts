@@ -19,6 +19,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { SkillStore } from '../src/server/skillStore.ts';
 import { parseSkillMarkdown } from '../src/server/frontmatter.ts';
+import { toFileUri } from '../src/ui/i18n.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, '..');
@@ -466,12 +467,69 @@ test('CLI: dist/cli.mjs install, status, and uninstall work cleanly in isolated 
     });
     const statusJson = JSON.parse(statusOut) as { installed: boolean; version: string | null };
     assert.equal(statusJson.installed, true);
-    assert.equal(statusJson.version, '1.1.0');
+    assert.equal(statusJson.version, '1.1.1');
 
     execFileSync(process.execPath, [cliPath, 'uninstall', '--target', targetDir], { stdio: 'pipe' });
     assert.equal(existsSync(targetDir), false);
   } finally {
     rmSync(tmpBase, { recursive: true, force: true });
+  }
+});
+
+test('Windows compat: toFileUri encodes POSIX, Windows drive, and UNC paths cleanly', () => {
+  assert.equal(toFileUri('/Users/alice/my app/SKILL.md'), 'file:///Users/alice/my%20app/SKILL.md');
+  assert.equal(
+    toFileUri('C:\\Users\\Alice Smith\\my-skill\\SKILL.md'),
+    'file:///C:/Users/Alice%20Smith/my-skill/SKILL.md',
+  );
+  assert.equal(
+    toFileUri('D:\\work\\#tag?\\SKILL.md'),
+    'file:///D:/work/%23tag%3F/SKILL.md',
+  );
+  assert.equal(toFileUri('\\\\fileserver\\skills\\SKILL.md'), 'file://fileserver/skills/SKILL.md');
+});
+
+test('Windows compat: CLI install --platform win32 writes direct node executable in mcp_config.json', () => {
+  const cliPath = join(projectRoot, 'dist', 'cli.mjs');
+  const tmpBase = mkdtempSync(join(tmpdir(), 'skill-docs-win-cli-'));
+  const targetDir = join(tmpBase, 'plugins', 'skill-docs');
+  try {
+    execFileSync(
+      process.execPath,
+      [cliPath, 'install', '--platform', 'win32', '--target', targetDir],
+      { stdio: 'pipe' },
+    );
+    const cfg = JSON.parse(readFileSync(join(targetDir, 'mcp_config.json'), 'utf-8')) as {
+      mcpServers?: { server?: { command?: string; args?: string[] } };
+    };
+    assert.equal(cfg.mcpServers?.server?.command, process.execPath);
+    assert.deepEqual(cfg.mcpServers?.server?.args, [
+      '${PLUGIN_ROOT}/dist/server.mjs',
+      '--data_dir=${PLUGIN_DATA}',
+    ]);
+  } finally {
+    rmSync(tmpBase, { recursive: true, force: true });
+  }
+});
+
+test('Windows compat: SkillStore normalizes backslash category paths when creating skills', async () => {
+  const env = makeTempEnv();
+  const store = new SkillStore({ ...env, enableWatcher: false });
+  try {
+    const created = await store.createSkill({
+      scopeId: 'global',
+      categoryPath: '\\frontend\\react\\',
+      name: 'win-cat-skill',
+      description: 'Valid description for testing backslash category normalization',
+    });
+    assert.equal(created.categoryPath, 'frontend/react');
+    assert.equal(
+      existsSync(join(env.globalConfigDir, 'skills', 'frontend', 'react', 'win-cat-skill', 'SKILL.md')),
+      true,
+    );
+  } finally {
+    store.close();
+    env.cleanup();
   }
 });
 

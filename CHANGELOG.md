@@ -2,6 +2,15 @@
 
 All notable changes to **Better-skills-manager** will be documented in this file.
 
+## [1.1.1] - 2026-11-26
+
+### Added
+- **Windows Antigravity Support**: Added `scripts/install.ps1` PowerShell installer and expanded CI test matrix (`docs/github-actions-ci.yml`) to `ubuntu-latest`, `macos-latest`, and `windows-latest`.
+- **OS-Aware File Manager Labels & Native File Links**: Properly encodes Windows `file:///C:/...` URIs for Antigravity native `fileView` tabs and displays `Finder` (macOS), `Explorer` / `檔案總管` (Windows), or `Files` / `資料夾` (Linux) dynamically.
+
+### Fixed
+- **Windows `mcp_config.json` & Path Edge Cases**: Uses `process.execPath` directly in generated Windows `mcp_config.json` so GUI Antigravity finds `node.exe` reliably even with `nvm-windows`/`fnm`/`volta`; fixes case-sensitive Windows drive-letter checks in server entrypoint detection, backslash category normalization, guarded POSIX `chmodSync` calls, `renameSync` `EPERM`/`EBUSY`/`EXDEV` copy fallback on locked directories, and `explorer.exe` exit-code handling.
+
 ## [1.1.0] - 2026-11-26
 
 ### Added

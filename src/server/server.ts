@@ -667,7 +667,7 @@ export function createSkillDocsServer(store: SkillStore): Server {
 
         case 'app_reveal_in_finder': {
           await store.revealInFinder(String(args.path ?? ''));
-          return textResult('已在 Finder 中顯示');
+          return textResult('已在檔案總管中顯示');
         }
 
         default:
@@ -703,9 +703,15 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
+function normalizeEntryPath(p: string): string {
+  const abs = resolve(p);
+  return process.platform === 'win32' ? abs.toLowerCase() : abs;
+}
+
 // Only auto-start when executed directly as entrypoint
 const isDirectRun =
-  process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+  Boolean(process.argv[1]) &&
+  normalizeEntryPath(process.argv[1]) === normalizeEntryPath(fileURLToPath(import.meta.url));
 if (isDirectRun) {
   main().catch((err) => {
     console.error('[skill-docs] fatal error:', err);

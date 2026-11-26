@@ -50,6 +50,7 @@ function parseOption(args: string[], flag: string): string | undefined {
 
 function cmdInstall(args: string[]): void {
   const target = resolve(parseOption(args, '--target') || defaultTargetDir());
+  const platform = parseOption(args, '--platform') || process.platform;
   const pluginSrc = join(pkgRoot, 'plugin');
   const distSrc = join(pkgRoot, 'dist');
   const serverJs = join(distSrc, 'server.mjs');
@@ -67,11 +68,11 @@ function cmdInstall(args: string[]): void {
   cpSync(serverJs, join(target, 'dist', 'server.mjs'));
   cpSync(appHtml, join(target, 'dist', 'app.html'));
 
-  if (process.platform === 'win32') {
+  if (platform === 'win32') {
     const winConfig = {
       mcpServers: {
         server: {
-          command: 'node',
+          command: process.execPath,
           args: ['${PLUGIN_ROOT}/dist/server.mjs', '--data_dir=${PLUGIN_DATA}'],
         },
       },
@@ -148,7 +149,7 @@ function printHelp(): void {
   console.log(`better-skills-manager v${readPackageVersion()} — Manage AI Skills as intuitively as regular documents
 
 Usage:
-  better-skills-manager install [--target <dir>]    Install Antigravity plugin (default: ~/.gemini/config/plugins/skill-docs)
+  better-skills-manager install [--target <dir>]    Install Antigravity plugin (default: ~/.gemini/config/plugins/skill-docs or %USERPROFILE%\\.gemini\\config\\plugins\\skill-docs)
   better-skills-manager uninstall [--target <dir>]  Uninstall Antigravity plugin (keeps your skills intact)
   better-skills-manager status [--target <dir>]     Show plugin installation status as JSON
   better-skills-manager mcp [--data_dir <dir>]      Run the MCP Apps stdio server directly

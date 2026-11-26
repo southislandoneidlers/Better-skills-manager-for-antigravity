@@ -53,10 +53,10 @@ AI Agent 的 Skill 本質上是一個資料夾（`skills/<name>/SKILL.md` 加上
 - **自由建多層分類資料夾，Agent 照樣讀得到**
   - 像用 Finder 一樣建立 `📁 前端開發/react` 等多層分類資料夾並拖拉歸檔，背景會自動更新 `skills.json` 的 `entries`（**完整保留你原本手動寫的 `inherits` 與外部目錄設定**）。
   - 想暫時停用某個 Skill 時，撥一下開關就會收進 `_disabled/<原分類>/` 封存，不用刪檔；之後重新開啟會自動歸位回原資料夾。
-- **發布／安裝時間 ＋ 一鍵檢查更新 ＋ Finder 雙向同步**
+- **發布／安裝時間 ＋ 一鍵檢查更新 ＋ 系統檔案總管雙向同步**
   - 列表直接列出每個 Skill 的**發布日期**與**安裝日期**。
   - 點擊 **`🔄 檢查更新`** 會比對綁定的 Git / GitHub 遠端版本或本機來源資料夾指紋，有新版時先自動備份舊版再一鍵更新。
-  - 透過檔案系統監聽，在 macOS Finder 直接丟進新 Skill 或用外部編輯器修改內容，1～2 秒內就會自動同步到面板。
+  - 透過檔案系統監聽，在 macOS Finder 或 Windows 檔案總管直接丟進新 Skill 或用外部編輯器修改內容，1～2 秒內就會自動同步到面板（按鈕也會依作業系統顯示 `Finder`、`檔案總管` 或 `資料夾`）。
 - **總次數／近 30 天次數 ＋ 365 天使用時間軸**
   - 增量掃描本機對話紀錄與面板附加紀錄（5 分鐘內重複讀取不會重複灌水），呈現 365 天熱力圖與精確時間點明細。
 - **多 Skills 協作關聯圖與中英文切換**
@@ -106,7 +106,7 @@ flowchart LR
 
 ## 快速安裝
 
-### 從原始碼安裝
+### macOS / Linux
 
 ```bash
 git clone https://github.com/southislandoneidlers/better-skills-manager.git
@@ -114,10 +114,17 @@ cd better-skills-manager
 ./scripts/install.sh
 ```
 
-> Windows 或其他跨平台環境請執行：
-> ```bash
-> npm install && npm run build && node ./dist/cli.mjs install
-> ```
+### Windows（PowerShell）
+
+```powershell
+git clone https://github.com/southislandoneidlers/better-skills-manager.git
+cd better-skills-manager
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+Windows 安裝腳本會自動建置並將外掛安裝到 `%USERPROFILE%\.gemini\config\plugins\skill-docs`，同時把 `mcp_config.json` 寫入你目前的 `node.exe` 完整路徑（支援官方 Node.js、`nvm-windows`、`fnm`、`volta`）。
+
+> 跨平台支援 **macOS**、**Windows** 與 **Linux**（需安裝 Node.js >= 20）。
 
 ### 或透過 `npx` 一行安裝（發佈至 npm 後）
 
@@ -125,7 +132,7 @@ cd better-skills-manager
 npx -y better-skills-manager install
 ```
 
-安裝完成後會自動將外掛部署至 `~/.gemini/config/plugins/skill-docs`（也可以透過 `--target <dir>` 指定其他位置）。
+安裝完成後會自動將外掛部署至 `~/.gemini/config/plugins/skill-docs`（Windows 為 `%USERPROFILE%\.gemini\config\plugins\skill-docs`，也可以透過 `--target <dir>` 指定其他位置）。
 
 ### 如何開啟使用
 

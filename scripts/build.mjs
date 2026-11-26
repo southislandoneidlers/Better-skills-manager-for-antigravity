@@ -35,7 +35,9 @@ await esbuild.build({
   banner: { js: `#!/usr/bin/env node\n${NODE_BANNER}` },
   logLevel: 'info',
 });
-chmodSync(cliOut, 0o755);
+if (process.platform !== 'win32') {
+  chmodSync(cliOut, 0o755);
+}
 
 // 3. Build Single-File UI HTML
 const uiRes = await esbuild.build({

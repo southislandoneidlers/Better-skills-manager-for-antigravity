@@ -14,6 +14,44 @@ export function detectInitialLang(hostLocale?: string): UiLang {
   return 'en';
 }
 
+export function toFileUri(absPath: string): string {
+  const forward = absPath.replace(/\\/g, '/');
+  const encoded = encodeURI(forward).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  if (/^[A-Za-z]:\//.test(forward)) {
+    return `file:///${encoded}`;
+  }
+  if (forward.startsWith('//')) {
+    return `file:${encoded}`;
+  }
+  return forward.startsWith('/') ? `file://${encoded}` : `file:///${encoded}`;
+}
+
+export function detectFileManagerLabel(lang: UiLang): string {
+  if (typeof navigator !== 'undefined') {
+    const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
+    if (ua.includes('win')) {
+      return lang === 'zh-TW' ? '檔案總管' : 'Explorer';
+    }
+    if (ua.includes('mac')) {
+      return 'Finder';
+    }
+    if (ua.includes('linux') || ua.includes('x11')) {
+      return lang === 'zh-TW' ? '資料夾' : 'Files';
+    }
+  }
+  return lang === 'zh-TW' ? '檔案總管' : 'Files';
+}
+
+export function detectMountPathPlaceholder(): string {
+  if (typeof navigator !== 'undefined') {
+    const ua = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase();
+    if (ua.includes('win')) {
+      return 'D:\\projects\\my-app';
+    }
+  }
+  return '~/projects/my-app';
+}
+
 export const STRINGS = {
   en: {
     brand: 'Better-skills-manager',

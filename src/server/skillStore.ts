@@ -96,8 +96,35 @@ function isBinaryFilename(name: string, buf?: Buffer): boolean {
   return false;
 }
 
+function normalizeCategoryInput(raw?: string): string {
+  return (raw ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+}
+
+function safeChmodExecutable(absPath: string): void {
+  if (process.platform === 'win32') return;
+  try {
+    chmodSync(absPath, 0o755);
+  } catch {
+    // Ignore permission errors on filesystems without POSIX mode bits
+  }
+}
+
+function moveDirSafe(srcDir: string, destDir: string): void {
+  try {
+    renameSync(srcDir, destDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'EXDEV' && code !== 'EPERM' && code !== 'EBUSY') {
+      throw err;
+    }
+    // Fallback for Windows directory locks (active watcher / Defender) or cross-volume moves
+    cpSync(srcDir, destDir, { recursive: true });
+    rmSync(srcDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
 function resolveInside(rootDir: string, relPath: string): string {
-  const clean = relPath.replace(/^\/+/, '');
+  const clean = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
   const abs = resolve(rootDir, clean);
   const rel = relative(resolve(rootDir), abs);
   if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
@@ -113,9 +140,11 @@ function encodeSkillId(scopeId: string, enabled: boolean, relDir: string): strin
 function cleanupEmptyParentDirs(dir: string, stopAtDir: string): void {
   let curr = resolve(dir);
   const stop = resolve(stopAtDir);
-  while (curr !== stop && curr.startsWith(stop)) {
+  while (true) {
+    const rel = relative(stop, curr);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) break;
     try {
-      const entries = readdirSync(curr).filter((e) => e !== '.DS_Store');
+      const entries = readdirSync(curr).filter((e) => e !== '.DS_Store' && e !== 'Thumbs.db');
       if (entries.length === 0) {
         rmSync(curr, { recursive: true, force: true });
         curr = dirname(curr);
@@ -849,7 +878,7 @@ export class SkillStore {
       throw new Error('無法在唯讀的內建目錄建立新 Skill，請選擇全域或專案範圍');
     }
     const slug = slugifySkillName(params.name);
-    const cat = (params.categoryPath ?? '').replace(/^\/+|\/+$/g, '');
+    const cat = normalizeCategoryInput(params.categoryPath);
     const targetParent = cat ? resolveInside(scope.skillsDir, cat) : scope.skillsDir;
     const skillDir = join(targetParent, slug);
     if (existsSync(skillDir)) {
@@ -867,7 +896,7 @@ export class SkillStore {
         `#!/usr/bin/env bash\nset -euo pipefail\n\necho "Executing ${slug}"\n`,
         'utf-8',
       );
-      chmodSync(scriptPath, 0o755);
+      safeChmodExecutable(scriptPath);
       body = `# ${params.name.trim() || slug}\n\n## 執行步驟\n\n1. 執行自動化腳本：[run.sh](./scripts/run.sh)\n2. 確認輸出結果無誤。\n`;
     } else if (params.template === 'reference-guide') {
       mkdirSync(join(skillDir, 'references'), { recursive: true });
@@ -920,7 +949,7 @@ export class SkillStore {
       throw new Error('無法移動或複製至唯讀內建目錄');
     }
 
-    const cleanCat = params.targetCategoryPath.replace(/^\/+|\/+$/g, '');
+    const cleanCat = normalizeCategoryInput(params.targetCategoryPath);
     const isCopy = Boolean(params.copy || destScope.id !== detail.scopeId);
 
     if (!isCopy) {
@@ -938,7 +967,7 @@ export class SkillStore {
       }
       const oldParent = dirname(detail.skillDir);
       mkdirSync(targetParent, { recursive: true });
-      renameSync(detail.skillDir, destDir);
+      moveDirSafe(detail.skillDir, destDir);
       cleanupEmptyParentDirs(
         oldParent,
         detail.enabled ? destScope.skillsDir : join(destScope.skillsDir, '_disabled'),
@@ -1012,7 +1041,7 @@ export class SkillStore {
 
     const oldParent = dirname(detail.skillDir);
     mkdirSync(targetParent, { recursive: true });
-    renameSync(detail.skillDir, destDir);
+    moveDirSafe(detail.skillDir, destDir);
     cleanupEmptyParentDirs(
       oldParent,
       detail.enabled ? scope.skillsDir : join(scope.skillsDir, '_disabled'),
@@ -1071,7 +1100,7 @@ export class SkillStore {
         mkdirSync(dirname(absTarget), { recursive: true });
         writeFileSync(absTarget, defaultAttachmentStub(rel), 'utf-8');
         if (rel.endsWith('.sh') || rel.endsWith('.py')) {
-          chmodSync(absTarget, 0o755);
+          safeChmodExecutable(absTarget);
         }
       }
       this.bumpSeq();
@@ -1090,7 +1119,7 @@ export class SkillStore {
   }): Promise<void> {
     const scope = this.findScope(params.scopeId);
     if (scope.readOnly) throw new Error('無法修改唯讀內建目錄的資料夾');
-    const cleanPath = params.folderPath.replace(/^\/+|\/+$/g, '');
+    const cleanPath = normalizeCategoryInput(params.folderPath);
     if (!cleanPath) throw new Error('請指定資料夾路徑');
 
     const absDir = resolveInside(scope.skillsDir, cleanPath);
@@ -1102,10 +1131,10 @@ export class SkillStore {
       if (!nextName) throw new Error('請提供新資料夾名稱');
       const destDir = join(dirname(absDir), nextName);
       if (existsSync(destDir)) throw new Error(`目標名稱已存在：${nextName}`);
-      renameSync(absDir, destDir);
+      moveDirSafe(absDir, destDir);
     } else if (params.action === 'delete') {
       if (!existsSync(absDir)) return;
-      const children = readdirSync(absDir).filter((e) => e !== '.DS_Store');
+      const children = readdirSync(absDir).filter((e) => e !== '.DS_Store' && e !== 'Thumbs.db');
       if (children.length > 0) {
         throw new Error('資料夾內仍有項目，請先移出裡面的 Skill 或子資料夾再刪除');
       }
@@ -1150,7 +1179,7 @@ export class SkillStore {
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, content, 'utf-8');
     if (cleanRel.endsWith('.sh') || cleanRel.endsWith('.py')) {
-      chmodSync(abs, 0o755);
+      safeChmodExecutable(abs);
     }
     this.bumpSeq();
     await this.getSnapshot(true);
@@ -1313,22 +1342,29 @@ export class SkillStore {
 
   revealInFinder(targetPath: string): Promise<void> {
     return new Promise((resolvePromise, rejectPromise) => {
-      if (!existsSync(targetPath)) {
+      const normalizedPath = resolve(targetPath);
+      if (!existsSync(normalizedPath)) {
         rejectPromise(new Error(`找不到路徑：${targetPath}`));
         return;
       }
       if (process.platform === 'darwin') {
-        execFile('open', ['-R', targetPath], (err) => {
+        execFile('open', ['-R', normalizedPath], (err) => {
           if (err) rejectPromise(err);
           else resolvePromise();
         });
       } else if (process.platform === 'win32') {
-        execFile('explorer.exe', [`/select,${targetPath}`], (err) => {
-          if (err) rejectPromise(err);
-          else resolvePromise();
+        // explorer.exe often returns exit code 1 even when opening/selecting succeeds
+        execFile('explorer.exe', [`/select,${normalizedPath}`], (err) => {
+          if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+            rejectPromise(err);
+          } else {
+            resolvePromise();
+          }
         });
       } else {
-        const dirToOpen = statSync(targetPath).isDirectory() ? targetPath : dirname(targetPath);
+        const dirToOpen = statSync(normalizedPath).isDirectory()
+          ? normalizedPath
+          : dirname(normalizedPath);
         execFile('xdg-open', [dirToOpen], (err) => {
           if (err) rejectPromise(err);
           else resolvePromise();

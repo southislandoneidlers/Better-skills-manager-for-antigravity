@@ -2,7 +2,7 @@
   "name": "skill-docs",
   "displayName": "Better-skills-manager",
   "description": "Manage AI Agent SKILL.md folders just like regular documents: single-document editing with attachments, live format checks, nested folders with skills.json sync, update checks, 365-day usage heatmap, and multi-skill collaboration map.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "homepage": "https://github.com/southislandoneidlers/better-skills-manager",
   "repository": "https://github.com/southislandoneidlers/better-skills-manager",
   "logo": "assets/logo.svg",
